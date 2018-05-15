@@ -130,11 +130,18 @@ int main(void)
   // Results variable for most of the FatFs function calls.
   FRESULT fres;
 
+  // Delay to allow SD card to get set up internally.
+  HAL_Delay(1000);
+
   // Mount the SD card.
   fres = f_mount(&USERFatFS, "", 1);
   if (fres != FR_OK) {
-	  while(1); // Fatal SD mounting error.
+      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
+      while(1); // Fatal SD mounting error.
   }
+
+  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
+  HAL_Delay(1000);
 
   FATFS* getFreeFs;
   DWORD free_clusters;
@@ -142,8 +149,12 @@ int main(void)
   // Acquire a handle to the filesystem.
   fres = f_getfree("", &free_clusters, &getFreeFs);
   if (fres != FR_OK) {
-	  while(1); // Fatal SD filesystem error.
+      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
+      while(1); // Fatal SD filesystem error.
   }
+
+  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
+  HAL_Delay(1000);
 
   // Collect data about the SD filesystem (not used in this demo).
   DWORD free_sectors, total_sectors;
@@ -153,9 +164,13 @@ int main(void)
   // Attempt to open an existing test.txt file.
   fres = f_open(&USERFile, "test.txt", FA_READ);
   if (fres != FR_OK) {
-	  // TODO: gracefully handle the file open error.
-	  while(1);
+      // TODO: gracefully handle the file open error.
+      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
+      while(1);
   }
+
+  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
+  HAL_Delay(1000);
 
   BYTE readBuf[30];
 
@@ -163,9 +178,13 @@ int main(void)
   // f_gets is a wrapper on f_read that does some string formatting for us.
   TCHAR* rres = f_gets((TCHAR*)readBuf, 30, &USERFile);
   if(!rres) {
-	  // TODO: gracefully handle file read error.
-	  while(1);
+      // TODO: gracefully handle file read error.
+      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
+      while(1);
   }
+
+  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
+  HAL_Delay(1000);
 
   // Close the file to ensure proper storage.
   f_close(&USERFile);
@@ -173,17 +192,25 @@ int main(void)
   // Open a new file "write.txt" for writing, creating it if it doesn't already exist.
   fres = f_open(&USERFile, "write.txt", FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
   if(fres != FR_OK) {
-	  // TODO: gracefully handle file open error.
-	  while(1);
+      // TODO: gracefully handle file open error.
+      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
+      while(1);
   }
 
-  strncpy((char*)readBuf, "a new file is made!", 19);
+  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
+  HAL_Delay(1000);
+
+  strncpy((char*)readBuf, "code is go!", 11);
   UINT bytesWrote;
-  fres = f_write(&USERFile, readBuf, 19, &bytesWrote);
+  fres = f_write(&USERFile, readBuf, 12, &bytesWrote);
   if(fres != FR_OK) {
-	  // TODO: gracefully handle file write error.
-	  while(1);
+      // TODO: gracefully handle file write error.
+      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
+      while(1);
   }
+
+  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
+  HAL_Delay(1000);
 
   // Close the file to ensure proper storage.
   f_close(&USERFile);
@@ -197,8 +224,13 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  HAL_GPIO_TogglePin(Green_LED_GPIO_Port, Green_LED_Pin);
   while (1)
   {
+
+      HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
+      HAL_GPIO_TogglePin(Green_LED_GPIO_Port, Green_LED_Pin);
+      HAL_Delay(300);
 
   /* USER CODE END WHILE */
 
