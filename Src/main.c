@@ -56,8 +56,12 @@
 #include "usart.h"
 #include "gpio.h"
 
-/* USER CODE BEGIN Includes */
 
+/* USER CODE BEGIN Includes */
+#include <string.h>
+#include <stdlib.h>
+
+#include "mysd.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -127,93 +131,32 @@ int main(void)
   HAL_TIM_Base_Stop_IT(&htim2);
   __HAL_TIM_CLEAR_IT(&htim2, TIM_IT_UPDATE);
 
-  // Results variable for most of the FatFs function calls.
-  FRESULT fres;
-
   // Delay to allow SD card to get set up internally.
   HAL_Delay(1000);
+
+  // Common results variable for most of the FatFs function calls.
+  // FR_OK = 0, any other result is an error and non-zero.
+  FRESULT fres;
 
   // Mount the SD card.
   fres = f_mount(&USERFatFS, "", 1);
   if (fres != FR_OK) {
-      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
       while(1); // Fatal SD mounting error.
   }
 
-  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
-  HAL_Delay(1000);
+  FIL pifile;
+  fres = f_open(&pifile, "test.txt", FA_READ);
 
-  FATFS* getFreeFs;
-  DWORD free_clusters;
+  int32_t p_size = 0;//, p_num = 1;
+  do {
+	  uint8_t* packet = NULL;
+	  p_size = get_next_packet(&pifile, &packet);
+	  if(p_size <= 0 || packet == NULL)
+		  break; // memory wasn't allocated, don't need to free
+	  free(packet);
+  } while(p_size > 0);
 
-  // Acquire a handle to the filesystem.
-  fres = f_getfree("", &free_clusters, &getFreeFs);
-  if (fres != FR_OK) {
-      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
-      while(1); // Fatal SD filesystem error.
-  }
-
-  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
-  HAL_Delay(1000);
-
-  // Collect data about the SD filesystem (not used in this demo).
-  DWORD free_sectors, total_sectors;
-  total_sectors = (getFreeFs->n_fatent - 2) * getFreeFs->csize;
-  free_sectors = free_clusters * getFreeFs->csize;
-
-  // Attempt to open an existing test.txt file.
-  fres = f_open(&USERFile, "test.txt", FA_READ);
-  if (fres != FR_OK) {
-      // TODO: gracefully handle the file open error.
-      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
-      while(1);
-  }
-
-  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
-  HAL_Delay(1000);
-
-  BYTE readBuf[30];
-
-  // We can either use f_read OR f_gets to get data out of files.
-  // f_gets is a wrapper on f_read that does some string formatting for us.
-  TCHAR* rres = f_gets((TCHAR*)readBuf, 30, &USERFile);
-  if(!rres) {
-      // TODO: gracefully handle file read error.
-      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
-      while(1);
-  }
-
-  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
-  HAL_Delay(1000);
-
-  // Close the file to ensure proper storage.
-  f_close(&USERFile);
-
-  // Open a new file "write.txt" for writing, creating it if it doesn't already exist.
-  fres = f_open(&USERFile, "write.txt", FA_WRITE | FA_OPEN_ALWAYS | FA_CREATE_ALWAYS);
-  if(fres != FR_OK) {
-      // TODO: gracefully handle file open error.
-      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
-      while(1);
-  }
-
-  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
-  HAL_Delay(1000);
-
-  strncpy((char*)readBuf, "code is go!", 11);
-  UINT bytesWrote;
-  fres = f_write(&USERFile, readBuf, 12, &bytesWrote);
-  if(fres != FR_OK) {
-      // TODO: gracefully handle file write error.
-      HAL_GPIO_WritePin(Green_LED_GPIO_Port, Green_LED_Pin, GPIO_PIN_SET);
-      while(1);
-  }
-
-  HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
-  HAL_Delay(1000);
-
-  // Close the file to ensure proper storage.
-  f_close(&USERFile);
+  f_close(&pifile);
 
   // Unmount the SD card when finished.
   // Not sure if we'll have to actually do this before the Pi can read and write to it?
