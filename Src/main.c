@@ -119,67 +119,83 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 
-  /*
-  We only want the timer to run after we push the button and light the LED,
-  so immediately stop it. For some reason, initializing the timer sets the
-  interrupt update bit, meaning as soon as we start up the timer after the
-  first button press, it raises the interrupt, immediately turning the LED
-  back off. This is fixed by clearing the interrupt bit after we stop it,
-  before the first run of the timer. Setting the counter to 0 isn't necessary,
-  as that's done in the button's interrupt handler.
-  */
-  HAL_TIM_Base_Stop_IT(&htim2);
-  __HAL_TIM_CLEAR_IT(&htim2, TIM_IT_UPDATE);
+	/*
+	 We only want the timer to run after we push the button and light the LED,
+	 so immediately stop it. For some reason, initializing the timer sets the
+	 interrupt update bit, meaning as soon as we start up the timer after the
+	 first button press, it raises the interrupt, immediately turning the LED
+	 back off. This is fixed by clearing the interrupt bit after we stop it,
+	 before the first run of the timer. Setting the counter to 0 isn't necessary,
+	 as that's done in the button's interrupt handler.
+	 */
+	HAL_TIM_Base_Stop_IT(&htim2);
+	__HAL_TIM_CLEAR_IT(&htim2, TIM_IT_UPDATE);
 
-  // Delay to allow SD card to get set up internally.
-  HAL_Delay(1000);
+	// Delay to allow SD card to get set up internally.
+	HAL_Delay(1000);
 
-  // Common results variable for most of the FatFs function calls.
-  // FR_OK = 0, any other result is an error and non-zero.
-  FRESULT fres;
+	// Common results variable for most of the FatFs function calls.
+	// FR_OK = 0, any other result is an error and non-zero.
+	FRESULT fres;
 
-  // Mount the SD card.
-  fres = f_mount(&USERFatFS, "", 1);
-  if (fres != FR_OK) {
-      while(1); // Fatal SD mounting error.
-  }
+	// Mount the SD card.
+	fres = f_mount(&USERFatFS, "", 1);
+	if (fres != FR_OK) {
+		while (1)
+			; // Fatal SD mounting error.
+	}
 
-  FIL pifile;
-  fres = f_open(&pifile, "test.txt", FA_READ);
+	FIL pifile;
+	fres = f_open(&pifile, "test.txt", FA_READ);
 
-  int32_t p_size = 0;//, p_num = 1;
-  do {
-	  uint8_t* packet = NULL;
-	  p_size = get_next_packet(&pifile, &packet);
-	  if(p_size <= 0 || packet == NULL)
-		  break; // memory wasn't allocated, don't need to free
-	  free(packet);
-  } while(p_size > 0);
+	int32_t p_size = 0;
+	do {
+		uint8_t* packet = NULL;
 
-  f_close(&pifile);
+		p_size = get_next_packet(&pifile, &packet);
 
-  // Unmount the SD card when finished.
-  // Not sure if we'll have to actually do this before the Pi can read and write to it?
-  // Or if we just have to ensure we're not also reading and writing while the Pi is.
-  f_mount(NULL, "", 0);
+		if (p_size <= 0 || packet == NULL)
+			break; // memory wasn't allocated, don't need to free
+
+		free(packet);
+	} while (p_size > 0);
+
+	uint8_t p_num[] = { 1, 3, 5, 7, 12, 15, 24, 36, 37, 42 };
+	for(int i = 0; i < sizeof p_num; i++) {
+		uint8_t* packet = NULL;
+
+		p_size = get_packet_num(p_num[i], &pifile, &packet);
+
+		if (p_size <= 0 || packet == NULL)
+			break; // memory wasn't allocated, don't need to free
+
+		free(packet);
+	}
+
+
+	f_close(&pifile);
+
+	// Unmount the SD card when finished.
+	// Not sure if we'll have to actually do this before the Pi can read and write to it?
+	// Or if we just have to ensure we're not also reading and writing while the Pi is.
+	f_mount(NULL, "", 0);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  HAL_GPIO_TogglePin(Green_LED_GPIO_Port, Green_LED_Pin);
-  while (1)
-  {
+	HAL_GPIO_TogglePin(Green_LED_GPIO_Port, Green_LED_Pin);
+	while (1) {
 
-      HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
-      HAL_GPIO_TogglePin(Green_LED_GPIO_Port, Green_LED_Pin);
-      HAL_Delay(300);
+		HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
+		HAL_GPIO_TogglePin(Green_LED_GPIO_Port, Green_LED_Pin);
+		HAL_Delay(300);
 
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
 
-  }
+	}
   /* USER CODE END 3 */
 
 }

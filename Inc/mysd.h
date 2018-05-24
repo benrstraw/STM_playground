@@ -9,10 +9,8 @@
 #define MYSD_MYSD_H_
 
 #define GP_NOT_FOUND -1
-#define GP_END_LTE_BEGIN -2
-#define GP_FRES_ERR -3
+#define GP_FRES_ERR -2
 
-//int32_t get_by_packet_num(uint32_t packet_num, char* filename, uint8_t** packet_buf);
 int32_t get_next_packet(FIL* pifile, uint8_t** packet_buf);
 int32_t get_packet_num(uint32_t packet_num, FIL* pifile, uint8_t** packet_buf);
 
