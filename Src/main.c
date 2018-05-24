@@ -56,7 +56,6 @@
 #include "usart.h"
 #include "gpio.h"
 
-
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include <stdlib.h>
