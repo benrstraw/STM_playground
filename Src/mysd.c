@@ -14,7 +14,7 @@ const char packet_header[] = { '_', '.', ',', '_' };
 
 static int32_t get_next_packet_bounds(FIL* pifile) {
 	if(f_tell(pifile) == f_size(pifile))
-			return 0; // hit end of file, return 0 bytes
+		return 0; // hit end of file, return 0 bytes
 
 	FRESULT fres;
 
@@ -66,6 +66,9 @@ int32_t get_next_packet(FIL* pifile, uint8_t** packet_buf) {
 		return p_size; // less than zero, error out without malloc-ing
 
 	*packet_buf = malloc(p_size);
+	if(*packet_buf == NULL)
+		return GP_BAD_MALLOC;
+
 	memset(*packet_buf, 0, p_size);
 
 	UINT bytesRead = 0;
@@ -102,6 +105,9 @@ int32_t get_packet_num(uint32_t packet_num, FIL* pifile, uint8_t** packet_buf) {
 		return p_size; // less than zero, error out without malloc-ing
 
 	*packet_buf = malloc(p_size);
+	if(*packet_buf == NULL)
+		return GP_BAD_MALLOC;
+
 	memset(*packet_buf, 0, p_size);
 
 	UINT bytesRead = 0;

@@ -140,6 +140,7 @@ int main(void)
 	// Mount the SD card.
 	fres = f_mount(&USERFatFS, "", 1);
 	if (fres != FR_OK) {
+		HAL_UART_Transmit(&huart1, "f_mount NOT OKAY", strlen("f_mount NOT OKAY"), 0xFFFF);
 		while (1)
 			; // Fatal SD mounting error.
 	}
@@ -152,11 +153,22 @@ int main(void)
 		uint8_t* packet = NULL;
 
 		p_size = get_next_packet(&pifile, &packet);
-
-		if (p_size <= 0 || packet == NULL)
+		if (p_size <= 0)
 			break; // memory wasn't allocated, don't need to free
 
-		free(packet);
+		uint8_t* re_packet = realloc(packet, p_size + 3);
+		if(re_packet == NULL) {
+			free(packet); // reallocation failed, re_packet is invalid
+			break;
+		}
+
+		re_packet[p_size - 2] = '\r';
+		re_packet[p_size - 1] = '\n';
+		re_packet[p_size] = '\0';
+
+		HAL_UART_Transmit(&huart1, re_packet, strlen((char*)re_packet), 0xFFFF);
+
+		free(re_packet); // `packet` was invalidated upon successful realloc
 	} while (p_size > 0);
 
 	uint8_t p_num[] = { 1, 3, 5, 7, 12, 15, 24, 36, 37, 42 };
@@ -164,11 +176,22 @@ int main(void)
 		uint8_t* packet = NULL;
 
 		p_size = get_packet_num(p_num[i], &pifile, &packet);
-
-		if (p_size <= 0 || packet == NULL)
+		if (p_size <= 0)
 			break; // memory wasn't allocated, don't need to free
 
-		free(packet);
+		uint8_t* re_packet = realloc(packet, p_size + 3);
+		if(re_packet == NULL) {
+			free(packet); // reallocation failed, re_packet is invalid
+			break;
+		}
+
+		re_packet[p_size - 2] = '\r';
+		re_packet[p_size - 1] = '\n';
+		re_packet[p_size] = '\0';
+
+		HAL_UART_Transmit(&huart1, re_packet, strlen((char*)re_packet), 0xFFFF);
+
+		free(re_packet); // `packet` was invalidated upon successful realloc
 	}
 
 
