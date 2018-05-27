@@ -5,12 +5,114 @@
  *      Author: Ben
  */
 
+#include "ff.h"
 #include <stdlib.h>
 #include <string.h>
-#include "ff.h"
+#include <stdint.h>
 #include "mysd.h"
 
-const char packet_header[] = { '_', '.', ',', '_' };
+// ASCII 23: ETB (end of transmission block) and 30: RS (record separator) codes
+const char packet_sepr[] = { 0x17, 0x1e };
+const char name_head_file[] = "head.bin";
+const char name_data_file[] = "data.bin";
+
+// Always R then W.
+uint64_t r_head = 0;
+uint64_t w_head = 0;
+
+FATFS sd_fs;
+FIL head_file;
+FIL data_file;
+FRESULT fres;
+
+uint8_t sd_init() {
+	fres = f_mount(&sd_fs, "", 1);
+	if(fres != FR_OK)
+		return SDI_BAD_MOUNT;
+
+	fres = f_open(&head_file, name_head_file, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
+	if(fres != FR_OK)
+		return SDI_OPEN_ERR;
+
+	if(f_size(&head_file) > 0) {
+		recall_heads();
+	} else {
+		flush_heads();
+	}
+
+	return 0;
+}
+
+void sd_deinit() {
+	flush_heads();
+	f_close(&head_file);
+	f_close(&data_file);
+	f_mount(NULL, "", 1);
+}
+
+uint8_t recall_heads() {
+	UINT bytes_read;
+	BYTE head_buff[sizeof r_head + sizeof w_head];
+
+	fres = f_lseek(&head_file, 0);
+	if(fres != FR_OK)
+		return SD_SEEK_ERR;
+
+	fres = f_read(&head_file, head_buff, sizeof head_buff, &bytes_read);
+	if(fres != FR_OK || bytes_read < sizeof head_buff)
+		return SD_READ_ERR;
+
+	// Always R then W.
+	// r_head is up first, with 8 bytes to read.
+	r_head = (uint64_t)head_buff[7] | (uint64_t)head_buff[6] << 8
+			| (uint64_t)head_buff[5] << 16 | (uint64_t)head_buff[4] << 24
+			| (uint64_t)head_buff[3] << 32 | (uint64_t)head_buff[2] << 40
+			| (uint64_t)head_buff[1] << 48 | (uint64_t)head_buff[0] << 56;
+	// Same with w_head.
+	w_head = (uint64_t)head_buff[15] | (uint64_t)head_buff[14] << 8
+			| (uint64_t)head_buff[13] << 16 | (uint64_t)head_buff[12] << 24
+			| (uint64_t)head_buff[11] << 32 | (uint64_t)head_buff[10] << 40
+			| (uint64_t)head_buff[9] << 48 | (uint64_t)head_buff[8] << 56;
+
+	return SD_OK;
+}
+
+uint8_t flush_heads() {
+	BYTE head_buff[sizeof r_head + sizeof w_head];
+
+	head_buff[0] = (r_head >> 56) & 0xFF;
+	head_buff[1] = (r_head >> 48) & 0xFF;
+	head_buff[2] = (r_head >> 40) & 0xFF;
+	head_buff[3] = (r_head >> 32) & 0xFF;
+	head_buff[4] = (r_head >> 24) & 0xFF;
+	head_buff[5] = (r_head >> 16) & 0xFF;
+	head_buff[6] = (r_head >> 8) & 0xFF;
+	head_buff[7] = r_head & 0xFF;
+
+	head_buff[8] = (w_head >> 56) & 0xFF;
+	head_buff[9] = (w_head >> 48) & 0xFF;
+	head_buff[10] = (w_head >> 40) & 0xFF;
+	head_buff[11] = (w_head >> 32) & 0xFF;
+	head_buff[12] = (w_head >> 24) & 0xFF;
+	head_buff[13] = (w_head >> 16) & 0xFF;
+	head_buff[14] = (w_head >> 8) & 0xFF;
+	head_buff[15] = w_head & 0xFF;
+
+	fres = f_lseek(&head_file, 0);
+	if(fres != FR_OK)
+		return SD_SEEK_ERR;
+
+	UINT bytes_written;
+	fres = f_write(&head_file, head_buff, sizeof head_buff, &bytes_written);
+	if(fres != FR_OK || bytes_written < sizeof head_buff)
+		return SD_WRITE_ERR;
+
+	fres = f_sync(&head_file);
+	if(fres != FR_OK)
+		return SD_SYNC_ERR;
+
+	return SD_OK;
+}
 
 static int32_t get_next_packet_bounds(FIL* pifile) {
 	if(f_tell(pifile) == f_size(pifile))
@@ -39,10 +141,10 @@ static int32_t get_next_packet_bounds(FIL* pifile) {
 		uint32_t block_start = (f_tell(pifile) - bytesRead);
 
 		for(int i = 0; i < bytesRead; i++) {
-			if(block_start + i > p_begin && readBuf[i] == packet_header[header_found++]) {
+			if(block_start + i > p_begin && readBuf[i] == packet_sepr[header_found++]) {
 				if(header_found == 1) {
 					next_begin = block_start + i;
-				} else if(header_found == sizeof packet_header) {
+				} else if(header_found == sizeof packet_sepr) {
 					next_found = 1;
 					break;
 				}

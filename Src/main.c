@@ -48,6 +48,9 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
+#include <sys/unistd.h>
 
 #include "ff.h"
 #include "mysd.h"
@@ -69,6 +72,18 @@ void SystemClock_Config(void);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
+
+int _write(int file, char *data, int len) {
+	if ((file != STDOUT_FILENO) && (file != STDERR_FILENO)) {
+		errno = EBADF;
+		return -1;
+	}
+
+	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, (uint8_t*) data, len, 0xFFFF);
+
+	// return # of bytes written - as best we can tell
+	return (status == HAL_OK ? len : 0);
+}
 
 /* USER CODE END 0 */
 
@@ -106,8 +121,9 @@ int main(void)
   MX_RTC_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
+/*
 
-	/*
+
 	 We only want the timer to run after we push the button and light the LED,
 	 so immediately stop it. For some reason, initializing the timer sets the
 	 interrupt update bit, meaning as soon as we start up the timer after the
@@ -115,7 +131,7 @@ int main(void)
 	 back off. This is fixed by clearing the interrupt bit after we stop it,
 	 before the first run of the timer. Setting the counter to 0 isn't necessary,
 	 as that's done in the button's interrupt handler.
-	 */
+
 	HAL_TIM_Base_Stop_IT(&htim2);
 	__HAL_TIM_CLEAR_IT(&htim2, TIM_IT_UPDATE);
 
@@ -192,17 +208,39 @@ int main(void)
 	// Not sure if we'll have to actually do this before the Pi can read and write to it?
 	// Or if we just have to ensure we're not also reading and writing while the Pi is.
 	f_mount(NULL, "", 0);
+*/
 
+  //sd_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	HAL_GPIO_TogglePin(Green_LED_GPIO_Port, Green_LED_Pin);
+	uint8_t cin;
 	while (1) {
+		HAL_UART_Receive(&huart1, &cin, 1, 0xFFFFFF);
 
-		HAL_GPIO_TogglePin(Blue_LED_GPIO_Port, Blue_LED_Pin);
-		HAL_GPIO_TogglePin(Green_LED_GPIO_Port, Green_LED_Pin);
-		HAL_Delay(300);
+		if(cin == 'd') { // [d]einitialize SD
+			printf("Deinitializing mySD...\r\n");
+			sd_deinit();
+		} else if(cin == 'i') { // [i]nitialize SD
+			printf("Initializing mySD... [%d]\r\n", sd_init());
+		} else if(cin == 'h') { // get [h]eads
+			printf("R/W heads are at: R = <%lu>, W = <%lu>\r\n", (uint32_t)r_head, (uint32_t)w_head);
+		} else if(cin == 'f') { // [f]lush heads
+			printf("Flushing heads... [%d]\r\n", flush_heads());
+		} else if(cin == 'c') { // re[c]all heads
+			printf("Recalling heads... [%d]\r\n", recall_heads());
+			printf("R = <%lu> W = <%lu>\r\n", (uint32_t)r_head, (uint32_t)w_head);
+		} else if(cin == 'a') { // [a]dvance heads
+			r_head += 2;
+			w_head += 4;
+			printf("Heads advanced! R = <%lu> W = <%lu>\r\n", (uint32_t)r_head, (uint32_t)w_head);
+		} else if(cin == 'z') { // [z]ero heads
+			r_head = 0;
+			w_head = 0;
+			printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)r_head, (uint32_t)w_head);
+		}
 
   /* USER CODE END WHILE */
 
