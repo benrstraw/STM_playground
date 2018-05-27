@@ -49,6 +49,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "ff.h"
 #include "mysd.h"
 /* USER CODE END Includes */
 
@@ -124,6 +125,8 @@ int main(void)
 	// Common results variable for most of the FatFs function calls.
 	// FR_OK = 0, any other result is an error and non-zero.
 	FRESULT fres;
+
+	FATFS USERFatFS;
 
 	// Mount the SD card.
 	fres = f_mount(&USERFatFS, "", 1);

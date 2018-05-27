@@ -96,7 +96,6 @@ static
 void despiselect(void) {
 	//CS_HIGH();		/* Set CS# high */
 	xchg_spi(0xFF); /* Dummy clock (force DO hi-z for multiple slave SPI) */
-
 }
 
 /*-----------------------------------------------------------------------*/
@@ -108,7 +107,7 @@ int spiselect(void) /* 1:OK, 0:Timeout */
 {
 	//CS_LOW();		/* Set CS# low */
 	xchg_spi(0xFF); /* Dummy clock (force DO enabled) */
-	if (wait_ready(500))
+	if (wait_ready(1000))
 		return 1; /* Wait for card ready */
 
 	despiselect();
@@ -264,7 +263,9 @@ DSTATUS disk_initialize(BYTE pdrv /* Physical drive nmuber to identify the drive
 			if (ocr[2] == 0x01 && ocr[3] == 0xAA) { /* Is the card supports vcc of 2.7-3.6V? */
 				while (SPI_Timer_Status() && send_cmd(ACMD41, 1UL << 30))
 					; /* Wait for end of initialization with ACMD41(HCS) */
-				if (SPI_Timer_Status() && send_cmd(CMD58, 0) == 0) { /* Check CCS bit in the OCR */
+				BYTE test = wait_ready(500);
+				test = send_cmd(CMD58, 0);
+				if (SPI_Timer_Status() && test == 0) { /* Check CCS bit in the OCR */
 					for (n = 0; n < 4; n++)
 						ocr[n] = xchg_spi(0xFF);
 					ty = (ocr[0] & 0x40) ? CT_SD2 | CT_BLOCK : CT_SD2; /* Card id SDv2 */
@@ -470,7 +471,7 @@ void *buff /* Buffer to send/receive control data */
 	case CTRL_TRIM: /* Erase a block of sectors (used when _USE_ERASE == 1) */
 		if (!(CardType & CT_SDC))
 			break; /* Check if the card is SDC */
-		if (USER_ioctl(pdrv, MMC_GET_CSD, csd))
+		if (disk_ioctl(pdrv, MMC_GET_CSD, csd))
 			break; /* Get CSD */
 		if (!(csd[0] >> 6) && !(csd[10] & 0x40))
 			break; /* Check if sector erase can be applied to the card */
@@ -496,3 +497,6 @@ void *buff /* Buffer to send/receive control data */
 	return res;
 }
 
+DWORD get_fattime(void) {
+	return 0;
+}

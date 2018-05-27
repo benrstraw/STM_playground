@@ -5,6 +5,8 @@
  *      Author: Ben
  */
 
+#include <stdint.h>
+
 #ifndef MYSD_MYSD_H_
 #define MYSD_MYSD_H_
 
