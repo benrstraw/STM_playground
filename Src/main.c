@@ -215,7 +215,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	HAL_GPIO_TogglePin(Green_LED_GPIO_Port, Green_LED_Pin);
 	uint8_t cin;
 	while (1) {
 		HAL_UART_Receive(&huart1, &cin, 1, 0xFFFFFF);
@@ -233,13 +232,26 @@ int main(void)
 			printf("Recalling heads... [%d]\r\n", recall_heads());
 			printf("R = <%lu> W = <%lu>\r\n", (uint32_t)r_head, (uint32_t)w_head);
 		} else if(cin == 'a') { // [a]dvance heads
-			r_head += 2;
-			w_head += 4;
-			printf("Heads advanced! R = <%lu> W = <%lu>\r\n", (uint32_t)r_head, (uint32_t)w_head);
+			printf("Heads advanced! R = <%lu> W = <%lu>\r\n", (uint32_t)(++r_head), (uint32_t)(++w_head));
 		} else if(cin == 'z') { // [z]ero heads
-			r_head = 0;
-			w_head = 0;
-			printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)r_head, (uint32_t)w_head);
+			printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)(r_head = 0), (uint32_t)(w_head = 0));
+		} else if(cin == 'g') { // [g]et next packet
+
+		} else if(cin == 's') {
+			printf("Seeking to read head... [%d]\r\n", f_lseek(&data_file, r_head));
+		} else if(cin == 'w') {
+			char s_buffer[512];
+			uint16_t s_i = 0;
+			do {
+				HAL_UART_Receive(&huart1, &cin, 1, 0xFFFFFF);
+				if(cin == '\r' || cin == '\n')
+					break;
+				s_buffer[s_i] = cin;
+				HAL_UART_Transmit(&huart1, &cin, 1, 0xFFFFFF);
+			} while (cin != '\r' && cin != '\r' && ++s_i < (sizeof s_buffer) - 1);
+			s_buffer[s_i + 1] = '\0';
+
+			printf("\rWriting: \"%s\"\r\n", s_buffer);
 		}
 
   /* USER CODE END WHILE */

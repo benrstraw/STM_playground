@@ -40,7 +40,7 @@
 #define FF_USE_FASTSEEK	0
 /* This option switches fast seek function. (0:Disable or 1:Enable) */
 
-#define FF_USE_EXPAND	0
+#define FF_USE_EXPAND	1
 /* This option switches f_expand function. (0:Disable or 1:Enable) */
 
 #define FF_USE_CHMOD	0
@@ -58,7 +58,7 @@
  / Locale and Namespace Configurations
  /---------------------------------------------------------------------------*/
 
-#define FF_CODE_PAGE	932
+#define FF_CODE_PAGE	437
 /* This option specifies the OEM code page to be used on the target system.
  /  Incorrect code page setting can cause a file open failure.
  /
@@ -86,7 +86,7 @@
  /     0 - Include all code pages above and configured by f_setcp()
  */
 
-#define FF_USE_LFN		0
+#define FF_USE_LFN		3
 #define FF_MAX_LFN		255
 /* The FF_USE_LFN switches the support for LFN (long file name).
  /
@@ -206,7 +206,7 @@
  /  Instead of private sector buffer eliminated from the file object, common sector
  /  buffer in the filesystem object (FATFS) is used for the file data transfer. */
 
-#define FF_FS_EXFAT		0
+#define FF_FS_EXFAT		1
 /* This option switches support for exFAT filesystem. (0:Disable or 1:Enable)
  /  To enable exFAT, also LFN needs to be enabled.
  /  Note that enabling exFAT discards ANSI C (C89) compatibility. */
