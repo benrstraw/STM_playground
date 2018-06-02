@@ -210,7 +210,7 @@ int main(void)
 	f_mount(NULL, "", 0);
 */
 
-  //sd_init();
+  mysd* sd = NULL;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -221,38 +221,74 @@ int main(void)
 
 		if(cin == 'd') { // [d]einitialize SD
 			printf("Deinitializing mySD...\r\n");
-			sd_deinit();
+			sd_deinit(sd);
+			free(sd);
+			sd = NULL;
 		} else if(cin == 'i') { // [i]nitialize SD
-			printf("Initializing mySD... [%d]\r\n", sd_init());
+			if(!sd) {
+				sd = calloc(1, sizeof(mysd));
+				printf("Initializing mySD... [%d]\r\n", sd_init(sd));
+			}
 		} else if(cin == 'h') { // get [h]eads
-			printf("R/W heads are at: R = <%lu>, W = <%lu>\r\n", (uint32_t)r_head, (uint32_t)w_head);
+			if(sd)
+				printf("R/W heads are at: R = <%lu>, W = <%lu>\r\n", (uint32_t)sd->r_head, (uint32_t)sd->w_head);
 		} else if(cin == 'f') { // [f]lush heads
-			printf("Flushing heads... [%d]\r\n", flush_heads());
+			printf("Flushing heads... [%d]\r\n", flush_heads(sd));
 		} else if(cin == 'c') { // re[c]all heads
-			printf("Recalling heads... [%d]\r\n", recall_heads());
-			printf("R = <%lu> W = <%lu>\r\n", (uint32_t)r_head, (uint32_t)w_head);
+			if(sd) {
+				printf("Recalling heads... [%d]\r\n", recall_heads(sd));
+				printf("R = <%lu> W = <%lu>\r\n", (uint32_t)sd->r_head, (uint32_t)sd->w_head);
+			}
 		} else if(cin == 'a') { // [a]dvance heads
-			printf("Heads advanced! R = <%lu> W = <%lu>\r\n", (uint32_t)(++r_head), (uint32_t)(++w_head));
+			if(sd) {
+				advance_head(&(sd->r_head), 1, sd);
+				advance_head(&(sd->w_head), 1, sd);
+				printf("Heads advanced! R = <%lu> W = <%lu>\r\n", (uint32_t)sd->r_head, (uint32_t)sd->w_head);
+			}
 		} else if(cin == 'z') { // [z]ero heads
-			printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)(r_head = 0), (uint32_t)(w_head = 0));
+			printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)(sd->r_head = 0), (uint32_t)(sd->w_head = 0));
 		} else if(cin == 'g') { // [g]et next packet
+			printf("Getting next packet...\r\n");
 
-		} else if(cin == 's') {
-			printf("Seeking to read head... [%d]\r\n", f_lseek(&data_file, r_head));
+			uint8_t* p_buf = NULL;
+			int32_t p_size = get_next_packet(&p_buf, sd);
+
+			if(p_size <= 0) {
+				printf("ERR [%ld]\r\n", p_size);
+				continue;
+			}
+
+			HAL_UART_Transmit(&huart1, p_buf, p_size, 0xFFFFFF);
+			free(p_buf);
+
+			printf(" [%ld] \r\n", p_size);
 		} else if(cin == 'w') {
-			char s_buffer[512];
+			uint8_t s_buffer[512];
 			uint16_t s_i = 0;
 			do {
 				HAL_UART_Receive(&huart1, &cin, 1, 0xFFFFFF);
 				if(cin == '\r' || cin == '\n')
 					break;
-				s_buffer[s_i] = cin;
+				s_buffer[s_i++] = cin;
 				HAL_UART_Transmit(&huart1, &cin, 1, 0xFFFFFF);
-			} while (cin != '\r' && cin != '\r' && ++s_i < (sizeof s_buffer) - 1);
-			s_buffer[s_i + 1] = '\0';
+			} while (s_i < (sizeof s_buffer) - 1);
+			s_buffer[s_i] = '\0';
 
-			printf("\rWriting: \"%s\"\r\n", s_buffer);
+			printf("\rWriting: \"%s\" ... [%d]\r\n", s_buffer, write_packet(s_buffer, strlen((char*)s_buffer), sd));
+		} else if(cin == '/') {
+			if(sd)
+				printf("R = <%lu>\r\n", (uint32_t)(++(sd->r_head)));
+		} else if(cin == '.') {
+			if(sd)
+				printf("R = <%lu>\r\n", (uint32_t)(sd->r_head = 0));
+		} else if(cin == '\'') {
+			if(sd)
+				printf("W = <%lu>\r\n", (uint32_t)(++(sd->w_head)));
+		} else if(cin == ';') {
+			if(sd)
+				printf("W = <%lu>\r\n", (uint32_t)(sd->w_head = 0));
 		}
+
 
   /* USER CODE END WHILE */
 
