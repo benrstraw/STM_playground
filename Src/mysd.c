@@ -112,13 +112,12 @@ uint8_t recall_heads(mysd* msd) {
 	if(fres != FR_OK || bytes_read < sizeof head_buff)
 		return SD_READ_ERR;
 
-	// Always R then W.
+	// Building ints from bytes, hooray! Stored big-endian.
 	// r_head is up first, with 8 bytes to read.
 	msd->r_head = (uint64_t)head_buff[7] | (uint64_t)head_buff[6] << 8
 			| (uint64_t)head_buff[5] << 16 | (uint64_t)head_buff[4] << 24
 			| (uint64_t)head_buff[3] << 32 | (uint64_t)head_buff[2] << 40
 			| (uint64_t)head_buff[1] << 48 | (uint64_t)head_buff[0] << 56;
-	// Same with w_head.
 	msd->w_head = (uint64_t)head_buff[15] | (uint64_t)head_buff[14] << 8
 			| (uint64_t)head_buff[13] << 16 | (uint64_t)head_buff[12] << 24
 			| (uint64_t)head_buff[11] << 32 | (uint64_t)head_buff[10] << 40
@@ -133,6 +132,8 @@ uint8_t flush_heads(mysd* msd) {
 
 	BYTE head_buff[sizeof msd->r_head + sizeof msd->w_head];
 
+	// Dumping the head integers into byte arrays through the magic of bit shifting.
+	// head_buff: 0-7 = read head, 8-15 = write head, both stored big-endian
 	head_buff[0] = (msd->r_head >> 56) & 0xFF;
 	head_buff[1] = (msd->r_head >> 48) & 0xFF;
 	head_buff[2] = (msd->r_head >> 40) & 0xFF;
@@ -172,11 +173,11 @@ void advance_head(uint64_t* head, int32_t offset, mysd* msd) {
 		*head = 0; // wtf?! this shouldn't happen
 
 	uint64_t dte = data_filesize - *head;
-	if(offset < dte)
+	if(offset < dte) // if our desired offset is less than the distance-to-end, just increment
 		*head += offset;
-	else
+	else // if we want to go past the end we must wrap
 		*head = (offset - dte);
-	flush_heads(msd);
+	flush_heads(msd); // flush to save
 }
 
 static int32_t get_next_packet_size(mysd* msd) {
@@ -189,35 +190,36 @@ static int32_t get_next_packet_size(mysd* msd) {
 	UINT bytesRead = 0;
 	FRESULT fres;
 
-	// while loop to find beginning of the next header
+	// No need to seek, that was handled already by get_next_packet, the only valid caller of this function.
 	while(!next_found) {
+		uint32_t block_start = f_tell(msd->data_file);
+
 		fres = f_read(msd->data_file, readBuf, sizeof readBuf, &bytesRead);
 		if(fres != FR_OK)
 			return GP_FRES_ERR;
-		else if(bytesRead == 0) {
+		else if(bytesRead == 0) { // If we read zero, we're at the end, wrap back to the beginning.
 			fres = f_lseek(msd->data_file, 0);
 			continue;
 		}
-
-		uint32_t block_start = (f_tell(msd->data_file) - bytesRead);
 
 		for(int i = 0; i < bytesRead; i++) {
 			if(block_start + i == msd->w_head && msd->r_head != msd->w_head)
 				return GP_RW_INTERSECT; // should never see this, W head should immediately follow a p_sepr
 
 			if(readBuf[i] == packet_sepr[header_found++]) {
-				if(header_found == 1) {
+				if(header_found == 1) { // if this is first byte, mark it as start of header
 					next_begin = block_start + i;
 				} else if(header_found == sizeof packet_sepr) {
-					next_found = 1;
+					next_found = 1; // if this is last byte, indicate we've found a complete header
 					break;
 				}
 			} else {
-				header_found = 0;
+				header_found = 0; // reset header found so we're searching for first byte again
 			}
 		}
 	}
 
+	// Handle differing packet size computations for possible wrapping of the heads.
 	if(next_begin < msd->r_head)
 		return (data_filesize - msd->r_head) + next_begin;
 	else
@@ -228,37 +230,41 @@ int32_t get_next_packet(uint8_t** packet_buf, mysd* msd) {
 	if(!msd)
 		return GP_MSD_NULL;
 
+	// Move file pointer to our read head.
 	FRESULT fres = f_lseek(msd->data_file, msd->r_head);
 	if(fres != FR_OK)
 		return GP_SEEK_ERR;
 
+	// p_size will contain positive packet size on success, negative error value on failure
 	int32_t p_size = get_next_packet_size(msd);
 	if(p_size < 0)
 		return p_size; // less than zero, error out without malloc-ing
 	else if(p_size == 0) { // if size == 0 then the R head is on the start of a packet separator
 		do {
-			advance_head(&(msd->r_head), sizeof packet_sepr, msd); // advance by 2 to get past the packet separator
+			advance_head(&(msd->r_head), sizeof packet_sepr, msd); // adv. 2 to pass the packet separator
 			p_size = get_next_packet_size(msd);
 		} while (p_size == 0);
-		if(p_size < 0)
+		if(p_size < 0) // recheck the new packet for errors
 			return p_size;
 	}
 
+	// get_next_packet_size moved the file's internal pointer. Reset it to our read head.
 	fres = f_lseek(msd->data_file, msd->r_head);
 	if(fres != FR_OK)
 		return GP_SEEK_ERR;
 
+	// Allocate memory block for packet buffer. Caller of the function is responsible for free'ing!
 	*packet_buf = malloc(p_size);
 	if(*packet_buf == NULL)
 		return GP_BAD_MALLOC;
 
-	memset(*packet_buf, 0, p_size);
+	memset(*packet_buf, 0, p_size); // TODO: probably not needed, immediately filled by f_read
 
 	UINT bytesRead = 0;
 	fres = f_read(msd->data_file, *packet_buf, p_size, &bytesRead);
 	if(fres != FR_OK)
 		return GP_READ_ERR;
-	else if(bytesRead < p_size) {
+	else if(bytesRead < p_size) { // if we hit the end of the file, loop back to 0 and read the rest
 		uint32_t overflow = p_size - bytesRead;
 
 		fres = f_lseek(msd->data_file, 0);
@@ -273,7 +279,7 @@ int32_t get_next_packet(uint8_t** packet_buf, mysd* msd) {
 	}
 
 	msd->r_head = f_tell(msd->data_file) + sizeof packet_sepr;
-	if(msd->r_head >= data_filesize)
+	if(msd->r_head >= data_filesize) // f_read can advance file pointer past our max, clamp to filesize
 		msd->r_head = msd->r_head - data_filesize;
 	flush_heads(msd);
 
@@ -284,6 +290,7 @@ uint8_t write_packet(uint8_t* packet_buf, size_t packet_size, mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
+	// Move file pointer to out write head.
 	FRESULT fres = f_lseek(msd->data_file, msd->w_head);
 	if(fres != FR_OK)
 		return SD_SEEK_ERR;
@@ -309,10 +316,12 @@ uint8_t write_packet(uint8_t* packet_buf, size_t packet_size, mysd* msd) {
 		if(msd->r_head > msd->w_head || ((packet_size + sizeof packet_sepr) - dte) >= msd->r_head)
 			return SD_FILE_FULL;
 
+		// Write the bytes before the end...
 		fres = f_write(msd->data_file, packet_buf, dte, &bytes_written);
 		if(fres != FR_OK || bytes_written < dte)
 			return SD_WRITE_ERR;
 
+		// Seek to zero and write the rest.
 		fres = f_lseek(msd->data_file, 0);
 		if(fres != FR_OK)
 			return SD_SEEK_ERR;
@@ -322,6 +331,9 @@ uint8_t write_packet(uint8_t* packet_buf, size_t packet_size, mysd* msd) {
 			return SD_WRITE_ERR;
 	}
 
+	// Not as efficient as writing all the bytes at once, but the logic for wrapping the group
+	// was just too much for me to think about when I wrote this so I went with this less
+	// efficient but easier to write control flow.
 	for(int i = 0; i < sizeof packet_sepr; i++) {
 		if(f_tell(msd->data_file) >= data_filesize) {
 			fres = f_lseek(msd->data_file, 0);
@@ -339,7 +351,7 @@ uint8_t write_packet(uint8_t* packet_buf, size_t packet_size, mysd* msd) {
 		return SD_SYNC_ERR;
 
 	msd->w_head = f_tell(msd->data_file);
-	if(msd->w_head >= data_filesize)
+	if(msd->w_head >= data_filesize) // f_write can advance file pointer past our max, clamp to filesize
 		msd->w_head = msd->w_head - data_filesize;
 	flush_heads(msd);
 

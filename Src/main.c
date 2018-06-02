@@ -121,10 +121,8 @@ int main(void)
   MX_RTC_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-/*
 
-
-	 We only want the timer to run after we push the button and light the LED,
+/*	 We only want the timer to run after we push the button and light the LED,
 	 so immediately stop it. For some reason, initializing the timer sets the
 	 interrupt update bit, meaning as soon as we start up the timer after the
 	 first button press, it raises the interrupt, immediately turning the LED
@@ -137,80 +135,12 @@ int main(void)
 
 	// Delay to allow SD card to get set up internally.
 	HAL_Delay(1000);
-
-	// Common results variable for most of the FatFs function calls.
-	// FR_OK = 0, any other result is an error and non-zero.
-	FRESULT fres;
-
-	FATFS USERFatFS;
-
-	// Mount the SD card.
-	fres = f_mount(&USERFatFS, "", 1);
-	if (fres != FR_OK) {
-		HAL_UART_Transmit(&huart1, "f_mount NOT OKAY", strlen("f_mount NOT OKAY"), 0xFFFF);
-		while (1)
-			; // Fatal SD mounting error.
-	}
-
-	FIL pifile;
-	fres = f_open(&pifile, "test.txt", FA_READ);
-
-	int32_t p_size = 0;
-	do {
-		uint8_t* packet = NULL;
-
-		p_size = get_next_packet(&pifile, &packet);
-		if (p_size <= 0)
-			break; // memory wasn't allocated, don't need to free
-
-		uint8_t* re_packet = realloc(packet, p_size + 3);
-		if(re_packet == NULL) {
-			free(packet); // reallocation failed, re_packet is invalid
-			break;
-		}
-
-		re_packet[p_size - 2] = '\r';
-		re_packet[p_size - 1] = '\n';
-		re_packet[p_size] = '\0';
-
-		HAL_UART_Transmit(&huart1, re_packet, strlen((char*)re_packet), 0xFFFF);
-
-		free(re_packet); // `packet` was invalidated upon successful realloc
-	} while (p_size > 0);
-
-	uint8_t p_num[] = { 1, 3, 5, 7, 12, 15, 24, 36, 37, 42 };
-	for(int i = 0; i < sizeof p_num; i++) {
-		uint8_t* packet = NULL;
-
-		p_size = get_packet_num(p_num[i], &pifile, &packet);
-		if (p_size <= 0)
-			break; // memory wasn't allocated, don't need to free
-
-		uint8_t* re_packet = realloc(packet, p_size + 3);
-		if(re_packet == NULL) {
-			free(packet); // reallocation failed, re_packet is invalid
-			break;
-		}
-
-		re_packet[p_size - 2] = '\r';
-		re_packet[p_size - 1] = '\n';
-		re_packet[p_size] = '\0';
-
-		HAL_UART_Transmit(&huart1, re_packet, strlen((char*)re_packet), 0xFFFF);
-
-		free(re_packet); // `packet` was invalidated upon successful realloc
-	}
-
-
-	f_close(&pifile);
-
-	// Unmount the SD card when finished.
-	// Not sure if we'll have to actually do this before the Pi can read and write to it?
-	// Or if we just have to ensure we're not also reading and writing while the Pi is.
-	f_mount(NULL, "", 0);
 */
 
+  // Create a null pointer to a `mysd`, to be malloc'd upon request (see: cin == 'i')
+  // and populated by `sd_init`
   mysd* sd = NULL;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -223,16 +153,17 @@ int main(void)
 			printf("Deinitializing mySD...\r\n");
 			sd_deinit(sd);
 			free(sd);
-			sd = NULL;
+			sd = NULL; // set to NULL for the pointer validity checks in every branch!
 		} else if(cin == 'i') { // [i]nitialize SD
 			if(!sd) {
-				sd = calloc(1, sizeof(mysd));
-				printf("Initializing mySD... [%d]\r\n", sd_init(sd));
+				sd = calloc(1, sizeof(mysd)); // either calloc or memset zero so the struct's fields are null!
+				printf("Initializing mySD... [%d]\r\n", sd_init(sd)); // otherwise this call will fail!
 			}
 		} else if(cin == 'h') { // get [h]eads
-			if(sd)
+			if(sd) // this validity check in every branch that directly accesses `sd`
 				printf("R/W heads are at: R = <%lu>, W = <%lu>\r\n", (uint32_t)sd->r_head, (uint32_t)sd->w_head);
 		} else if(cin == 'f') { // [f]lush heads
+			// `sd` null check not needed; flush_heads does it's own, and we don't directly access
 			printf("Flushing heads... [%d]\r\n", flush_heads(sd));
 		} else if(cin == 'c') { // re[c]all heads
 			if(sd) {
@@ -246,7 +177,8 @@ int main(void)
 				printf("Heads advanced! R = <%lu> W = <%lu>\r\n", (uint32_t)sd->r_head, (uint32_t)sd->w_head);
 			}
 		} else if(cin == 'z') { // [z]ero heads
-			printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)(sd->r_head = 0), (uint32_t)(sd->w_head = 0));
+			if(sd)
+				printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)(sd->r_head = 0), (uint32_t)(sd->w_head = 0));
 		} else if(cin == 'g') { // [g]et next packet
 			printf("Getting next packet...\r\n");
 
@@ -262,29 +194,29 @@ int main(void)
 			free(p_buf);
 
 			printf(" [%ld] \r\n", p_size);
-		} else if(cin == 'w') {
+		} else if(cin == 'w') { // w = input a string to be added to the packet file
 			uint8_t s_buffer[512];
 			uint16_t s_i = 0;
-			do {
+			do { // we must assemble our own strings from individual characters, done in this loop
 				HAL_UART_Receive(&huart1, &cin, 1, 0xFFFFFF);
 				if(cin == '\r' || cin == '\n')
-					break;
-				s_buffer[s_i++] = cin;
-				HAL_UART_Transmit(&huart1, &cin, 1, 0xFFFFFF);
+					break; // while is just to provide an upper limit, this is the useful break
+				s_buffer[s_i++] = cin; // collect value then increment
+				HAL_UART_Transmit(&huart1, &cin, 1, 0xFFFFFF); // echo input back to user
 			} while (s_i < (sizeof s_buffer) - 1);
 			s_buffer[s_i] = '\0';
 
 			printf("\rWriting: \"%s\" ... [%d]\r\n", s_buffer, write_packet(s_buffer, strlen((char*)s_buffer), sd));
-		} else if(cin == '/') {
+		} else if(cin == '/') { // / = increment R head
 			if(sd)
 				printf("R = <%lu>\r\n", (uint32_t)(++(sd->r_head)));
-		} else if(cin == '.') {
+		} else if(cin == '.') { // . = reset R head to 0
 			if(sd)
 				printf("R = <%lu>\r\n", (uint32_t)(sd->r_head = 0));
-		} else if(cin == '\'') {
+		} else if(cin == '\'') { // ' = increment W head
 			if(sd)
 				printf("W = <%lu>\r\n", (uint32_t)(++(sd->w_head)));
-		} else if(cin == ';') {
+		} else if(cin == ';') { // ; = reset W head to 0
 			if(sd)
 				printf("W = <%lu>\r\n", (uint32_t)(sd->w_head = 0));
 		}
