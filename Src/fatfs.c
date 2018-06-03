@@ -1,8 +1,7 @@
 /**
   ******************************************************************************
-  * File Name          : SPI.c
-  * Description        : This file provides code for the configuration
-  *                      of the SPI instances.
+  * @file   fatfs.c
+  * @brief  Code for fatfs applications
   ******************************************************************************
   * This notice applies to any and all portions of this file
   * that are not between comment pairs USER CODE BEGIN and
@@ -47,111 +46,41 @@
   ******************************************************************************
   */
 
-/* Includes ------------------------------------------------------------------*/
-#include "spi.h"
+#include "fatfs.h"
 
-#include "gpio.h"
+uint8_t retUSER;    /* Return value for USER */
+char USERPath[4];   /* USER logical drive path */
+FATFS USERFatFS;    /* File system object for USER logical drive */
+FIL USERFile;       /* File object for USER */
 
-/* USER CODE BEGIN 0 */
+/* USER CODE BEGIN Variables */
 
-/* USER CODE END 0 */
+/* USER CODE END Variables */    
 
-SPI_HandleTypeDef hspi1;
-
-/* SPI1 init function */
-void MX_SPI1_Init(void)
+void MX_FATFS_Init(void) 
 {
+  /*## FatFS: Link the USER driver ###########################*/
+  retUSER = FATFS_LinkDriver(&USER_Driver, USERPath);
 
-  hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi1.Init.CRCPolynomial = 10;
-  if (HAL_SPI_Init(&hspi1) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
+  /* USER CODE BEGIN Init */
+  /* additional user code for init */     
+  /* USER CODE END Init */
 }
 
-void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
+/**
+  * @brief  Gets Time from RTC 
+  * @param  None
+  * @retval Time in DWORD
+  */
+DWORD get_fattime(void)
 {
-
-  GPIO_InitTypeDef GPIO_InitStruct;
-  if(spiHandle->Instance==SPI1)
-  {
-  /* USER CODE BEGIN SPI1_MspInit 0 */
-
-  /* USER CODE END SPI1_MspInit 0 */
-    /* SPI1 clock enable */
-    __HAL_RCC_SPI1_CLK_ENABLE();
-  
-    /**SPI1 GPIO Configuration    
-    PA5     ------> SPI1_SCK
-    PA11     ------> SPI1_MISO
-    PA12     ------> SPI1_MOSI 
-    */
-    GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_12;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-    GPIO_InitStruct.Pin = GPIO_PIN_11;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /* USER CODE BEGIN SPI1_MspInit 1 */
-
-  /* USER CODE END SPI1_MspInit 1 */
-  }
+  /* USER CODE BEGIN get_fattime */
+  return 0;
+  /* USER CODE END get_fattime */  
 }
 
-void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
-{
-
-  if(spiHandle->Instance==SPI1)
-  {
-  /* USER CODE BEGIN SPI1_MspDeInit 0 */
-
-  /* USER CODE END SPI1_MspDeInit 0 */
-    /* Peripheral clock disable */
-    __HAL_RCC_SPI1_CLK_DISABLE();
-  
-    /**SPI1 GPIO Configuration    
-    PA5     ------> SPI1_SCK
-    PA11     ------> SPI1_MISO
-    PA12     ------> SPI1_MOSI 
-    */
-    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_5|GPIO_PIN_11|GPIO_PIN_12);
-
-  /* USER CODE BEGIN SPI1_MspDeInit 1 */
-
-  /* USER CODE END SPI1_MspDeInit 1 */
-  }
-} 
-
-/* USER CODE BEGIN 1 */
-
-/* USER CODE END 1 */
-
-/**
-  * @}
-  */
-
-/**
-  * @}
-  */
+/* USER CODE BEGIN Application */
+     
+/* USER CODE END Application */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
