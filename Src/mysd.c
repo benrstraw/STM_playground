@@ -140,6 +140,7 @@ uint8_t sd_init(mysd* msd) {
 		}
 	}
 
+	FATFS_UnLinkDriver(USERPath);
 	uint8_t ret = FATFS_LinkDriver(&USER_Driver, USERPath);
 	if(ret)
 		return SDI_FATFS_LINK_ERR;
@@ -199,8 +200,6 @@ void sd_deinit(mysd* msd) {
 	free(msd->head_file);
 	free(msd->data_file);
 	free(msd->sd_fs);
-
-	FATFS_UnLinkDriver(USERPath);
 }
 
 uint8_t save_data(mysd* msd) {
