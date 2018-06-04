@@ -62,6 +62,8 @@
 #define User_PB_Pin GPIO_PIN_0
 #define User_PB_GPIO_Port GPIOA
 #define User_PB_EXTI_IRQn EXTI0_IRQn
+#define SD_CS_Pin GPIO_PIN_15
+#define SD_CS_GPIO_Port GPIOA
 #define Blue_LED_Pin GPIO_PIN_6
 #define Blue_LED_GPIO_Port GPIOB
 #define Green_LED_Pin GPIO_PIN_7

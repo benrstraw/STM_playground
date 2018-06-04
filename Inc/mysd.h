@@ -56,6 +56,7 @@ uint8_t sd_init(mysd* msd);
 void sd_deinit(mysd* msd);
 
 uint8_t save_data(mysd* msd);
+uint8_t refresh_data(mysd* msd);
 
 int16_t get_next_packet(uint8_t* packet_buf, mysd* msd);
 uint8_t write_next_packet(uint8_t* packet_buf, size_t packet_size, mysd* msd);

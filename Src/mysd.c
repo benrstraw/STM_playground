@@ -189,6 +189,11 @@ void sd_deinit(mysd* msd) {
 	free(msd->sd_fs);
 }
 
+uint8_t refresh_data(mysd* msd) {
+	f_close(msd->data_file);
+	return f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
+}
+
 uint8_t save_data(mysd* msd) {
 	uint8_t ret = flush_heads(msd);
 	if(ret != SD_OK)

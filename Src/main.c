@@ -261,6 +261,8 @@ int main(void)
 			}
 
 			printf("Done! [%lu]\r\n", HAL_GetTick());
+		} else if(cin == 'l') {
+			printf("Refreshing data... [%d]\r\n", refresh_data(sd));
 		}
 
 

@@ -81,8 +81,8 @@
 #define FCLK_SLOW() { hspi1.Instance->I2SPR = 128; }	/* Set SCLK = slow */
 #define FCLK_FAST() { hspi1.Instance->I2SPR = 16; }	/* Set SCLK = fast */
 
-//#define CS_HIGH()	{HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);}
-//#define CS_LOW()	{HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);}
+#define CS_HIGH()	{HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);}
+#define CS_LOW()	{HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);}
 
 /* MMC/SD command */
 #define CMD0	(0)			/* GO_IDLE_STATE */
@@ -210,7 +210,7 @@ static volatile DSTATUS Stat = STA_NOINIT;
   static
   void despiselect (void)
   {
-  	//CS_HIGH();		/* Set CS# high */
+  	CS_HIGH();		/* Set CS# high */
   	xchg_spi(0xFF);	/* Dummy clock (force DO hi-z for multiple slave SPI) */
 
   }
@@ -224,7 +224,7 @@ static volatile DSTATUS Stat = STA_NOINIT;
   static
   int spiselect (void)	/* 1:OK, 0:Timeout */
   {
-  	//CS_LOW();		/* Set CS# low */
+  	CS_LOW();		/* Set CS# low */
   	xchg_spi(0xFF);	/* Dummy clock (force DO enabled) */
   	if (wait_ready(1000)) return 1;	/* Wait for card ready */
 
