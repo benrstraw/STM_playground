@@ -10,11 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 const char name_head_file[] = "head.bin";
-
-const uint8_t packet_size = 128;
-const uint32_t packets_per_file = 33554431; // = floor of (4294967295 / 128)
 
 uint8_t recall_heads(mysd* msd) {
 	if(!msd)
@@ -83,7 +79,7 @@ uint8_t change_file(uint8_t new_file, mysd* msd) {
 		return SD_CLOSE_ERR;
 
 	msd->active_file = new_file;
-	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%u", msd->active_file);
+	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
 
 	fres = f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
 	if(fres != FR_OK)
@@ -92,10 +88,9 @@ uint8_t change_file(uint8_t new_file, mysd* msd) {
 	return SD_OK;
 }
 
-uint8_t set_active(uint32_t* head, mysd* msd) {
-	uint64_t packet_pos = (*head) * packet_size;
-	uint32_t packet_offset = packet_pos % packets_per_file;
-	uint8_t packet_file = packet_pos / packets_per_file;
+uint8_t set_active(uint32_t head, mysd* msd) {
+	uint32_t packet_offset = (head % MSD_PACKETS_PER_FILE) * MSD_PACKET_SIZE;
+	uint8_t packet_file = head / MSD_PACKETS_PER_FILE;
 
 	uint8_t res = change_file(packet_file, msd);
 	if(res != SD_OK)
@@ -110,7 +105,7 @@ uint8_t set_active(uint32_t* head, mysd* msd) {
 }
 
 uint32_t increment_head(uint32_t* head, mysd* msd) {
-	if((++(*head)) % (packets_per_file * msd->max_files))
+	if(((++(*head)) % (MSD_PACKETS_PER_FILE * msd->max_files)) == 0)
 		(*head) = 0;
 
 	return *head;
@@ -153,27 +148,19 @@ uint8_t sd_init(mysd* msd) {
 	if(fres != FR_OK)
 		return SD_OPEN_ERR;
 
-	if(f_size(msd->head_file) > 0) {
-		recall_heads(msd);
-	} else {
+	if(f_size(msd->head_file) < (sizeof msd->r_head + sizeof msd->w_head)) {
 		flush_heads(msd);
+	} else {
+		recall_heads(msd);
 	}
 
 	msd->active_file = 0;
-	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%u", msd->active_file);
+	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
 
-	DWORD fre_clust, fre_sect, tot_sect;
-	fres = f_getfree("", &fre_clust, &msd->sd_fs);
-	tot_sect = (msd->sd_fs->n_fatent - 2) * msd->sd_fs->csize;
-	fre_sect = fre_clust * msd->sd_fs->csize;
+	uint32_t tot_sect = (msd->sd_fs->n_fatent - 2) * msd->sd_fs->csize;
+	uint32_t total_packets = (tot_sect - 2000000) * (512 / 128); // tot_sect - 2mil sectors to accommodate ~gig of err and overhead
 
-	// tot_sect - 1 to accommodate the head file
-	uint32_t total_packets = (tot_sect - 1) * (512 / 128);
-	uint32_t free_packets = (fre_sect - 1) * (512 / 128);
-
-	UNUSED(free_packets);
-
-	msd->max_files = total_packets / packets_per_file;
+	msd->max_files = total_packets / MSD_PACKETS_PER_FILE;
 
 	fres = f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
 	if(fres != FR_OK)
@@ -214,39 +201,45 @@ uint8_t save_data(mysd* msd) {
 	return SD_OK;
 }
 
-int16_t get_next_packet(uint8_t** packet_buf, mysd* msd) {
+int16_t get_next_packet(uint8_t* packet_buf, mysd* msd) {
 	if(!msd)
 		return GP_MSD_NULL;
 
-	set_active(&msd->r_head, msd);
-
-	// Allocate memory block for packet buffer. Caller of the function is responsible for free'ing!
-	*packet_buf = malloc(packet_size);
-	if(*packet_buf == NULL)
-		return GP_BAD_MALLOC;
-
-	memset(*packet_buf, 0, packet_size); // TODO: probably not needed, immediately filled by f_read. Remove for speedup.
+	set_active(msd->r_head, msd);
 
 	UINT bytesRead = 0;
-	FRESULT fres = f_read(msd->data_file, *packet_buf, packet_size, &bytesRead);
-	if(fres != FR_OK)// || bytesRead < packet_size) TODO: ?
+	FRESULT fres = f_read(msd->data_file, packet_buf, MSD_PACKET_SIZE, &bytesRead);
+	if(fres != FR_OK)// || bytesRead < MSD_PACKET_SIZE) TODO: ?
 		return GP_READ_ERR;
+
+	if(bytesRead == 0)
+		return GP_NOT_FOUND;
 
 	increment_head(&msd->r_head, msd);
 
 	return bytesRead;
 }
 
-uint8_t write_next_packet(uint8_t* packet_buf, size_t packet_size, mysd* msd) {
+uint8_t write_next_packet(uint8_t* packet_buf, size_t in_size, mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
-	set_active(&msd->w_head, msd);
+	set_active(msd->w_head, msd);
+
+	uint8_t* write_buf = packet_buf;
+
+	if(in_size != MSD_PACKET_SIZE) {
+		write_buf = calloc(1, MSD_PACKET_SIZE);
+		memcpy(write_buf, packet_buf, in_size);
+	}
 
 	UINT bytes_written;
-	FRESULT fres = f_write(msd->data_file, packet_buf, packet_size, &bytes_written);
-	if(fres != FR_OK || bytes_written < packet_size)
+	FRESULT fres = f_write(msd->data_file, write_buf, MSD_PACKET_SIZE, &bytes_written);
+	if(fres != FR_OK || bytes_written < MSD_PACKET_SIZE)
 		return SD_WRITE_ERR;
+
+	if(in_size != MSD_PACKET_SIZE)
+		free(write_buf);
 
 	increment_head(&msd->w_head, msd);
 

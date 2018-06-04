@@ -96,6 +96,21 @@ int _write(int file, char *data, int len) {
 	return (status == HAL_OK ? len : 0);
 }
 
+void print_buf(uint8_t* buffer, size_t buf_size) {
+	const uint8_t line_length = 16;
+	for(int i = 0; i < (buf_size / line_length); i++) {
+		for(int j = 0; j < line_length; j++)
+			printf("%02X", buffer[(i * line_length) + j]);
+		printf("\r\n");
+	}
+
+	if(buf_size % 16) {
+		for(int k = 0; k < buf_size % line_length; k++)
+			printf("%02X", buffer[((buf_size / line_length) * line_length) + k]);
+		printf("\r\n");
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -180,8 +195,8 @@ int main(void)
 		} else if(cin == 'g') { // [g]et next packet
 			printf("Getting next packet...\r\n");
 
-			uint8_t* p_buf = NULL;
-			int32_t p_size = get_next_packet(&p_buf, sd);
+			uint8_t p_buf[MSD_PACKET_SIZE] = {0};
+			int32_t p_size = get_next_packet(p_buf, sd);
 
 			if(p_size <= 0) {
 				printf("ERR [%ld]\r\n", p_size);
@@ -189,9 +204,19 @@ int main(void)
 			}
 
 			HAL_UART_Transmit(&huart1, p_buf, p_size, 0xFFFFFF);
-			free(p_buf);
-
 			printf(" [%ld] \r\n", p_size);
+		} else if(cin == 'x') { // [g]et next packet
+			printf("Getting next packet (hex)...\r\n");
+
+			uint8_t p_buf[MSD_PACKET_SIZE] = {0};
+			int32_t p_size = get_next_packet(p_buf, sd);
+
+			if(p_size <= 0) {
+				printf("ERR [%ld]\r\n", p_size);
+				continue;
+			}
+
+			print_buf(p_buf, sizeof p_buf);
 		} else if(cin == 'w') { // w = input a string to be added to the packet file
 			uint8_t s_buffer[512];
 			uint16_t s_i = 0;
@@ -204,7 +229,7 @@ int main(void)
 			} while (s_i < (sizeof s_buffer) - 1);
 			s_buffer[s_i] = '\0';
 
-			printf("\rWriting: \"%s\" ... [%d]\r\n", s_buffer, write_next_packet(s_buffer, strlen((char*)s_buffer), sd));
+			printf("\rWriting: \"%s\" ... [%d]\r\n", (char*)s_buffer, write_next_packet(s_buffer, strlen((char*)s_buffer), sd));
 		} else if(cin == '/') { // / = increment R head
 			if(sd)
 				printf("R = <%lu>\r\n", (uint32_t)(++(sd->r_head)));
@@ -217,6 +242,25 @@ int main(void)
 		} else if(cin == ';') { // ; = reset W head to 0
 			if(sd)
 				printf("W = <%lu>\r\n", (uint32_t)(sd->w_head = 0));
+		} else if(cin == 's') { // ; = reset W head to 0
+			if(sd)
+				printf("Saving data... [%d]\r\n", save_data(sd));
+		} else if(cin == 'f') {
+			if(!sd)
+				continue;
+
+			printf("Filling 1000 random packets... [%lu]\r\n", HAL_GetTick());
+
+			uint8_t rand_buf[MSD_PACKET_SIZE];
+			srand(HAL_GetTick());
+			for(int i = 0; i < 1000; i++) {
+				for(int j = 0; j < MSD_PACKET_SIZE; j++)
+					rand_buf[j] = rand() % 0x0100;
+
+				write_next_packet(rand_buf, sizeof rand_buf, sd);
+			}
+
+			printf("Done! [%lu]\r\n", HAL_GetTick());
 		}
 
 

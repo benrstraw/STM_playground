@@ -35,12 +35,16 @@
 #include <stdint.h>
 #include "fatfs.h"
 
+#define MSD_PACKET_SIZE 128
+//#define MSD_PACKETS_PER_FILE 33554431 // = floor of (4294967295 / 128)
+#define MSD_PACKETS_PER_FILE 50 // very small number for testing
+
 typedef struct {
 	// Always R then W.
 	uint32_t r_head, w_head;
 
-	uint8_t max_files;
-	uint8_t active_file;
+	uint32_t max_files;
+	uint32_t active_file;
 	char active_file_name[4];
 
 	FATFS* sd_fs;
@@ -53,9 +57,7 @@ void sd_deinit(mysd* msd);
 
 uint8_t save_data(mysd* msd);
 
-uint32_t increment_head(uint32_t* head, mysd* msd);
-
-int16_t get_next_packet(uint8_t** packet_buf, mysd* msd);
+int16_t get_next_packet(uint8_t* packet_buf, mysd* msd);
 uint8_t write_next_packet(uint8_t* packet_buf, size_t packet_size, mysd* msd);
 
 #endif /* MYSD_MYSD_H_ */
