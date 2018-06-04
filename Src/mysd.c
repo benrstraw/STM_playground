@@ -71,6 +71,9 @@ uint8_t flush_heads(mysd* msd) {
 }
 
 uint8_t change_file(uint8_t new_file, mysd* msd) {
+	if(!msd)
+		return SD_MSD_NULL;
+
 	if(new_file == msd->active_file)
 		return SD_OK;
 
@@ -89,6 +92,9 @@ uint8_t change_file(uint8_t new_file, mysd* msd) {
 }
 
 uint8_t set_active(uint32_t head, mysd* msd) {
+	if(!msd)
+		return SD_MSD_NULL;
+
 	uint32_t packet_offset = (head % MSD_PACKETS_PER_FILE) * MSD_PACKET_SIZE;
 	uint8_t packet_file = head / MSD_PACKETS_PER_FILE;
 
@@ -105,6 +111,9 @@ uint8_t set_active(uint32_t head, mysd* msd) {
 }
 
 uint32_t increment_head(uint32_t* head, mysd* msd) {
+	if(!msd || !head)
+		return UINT32_MAX;
+
 	if(((++(*head)) % (MSD_PACKETS_PER_FILE * msd->max_files)) == 0)
 		(*head) = 0;
 
@@ -131,18 +140,18 @@ uint8_t sd_init(mysd* msd) {
 			msd->head_file = NULL;
 			msd->data_file = NULL;
 
-			return SDI_BAD_MALLOC;
+			return SD_BAD_MALLOC;
 		}
 	}
 
 	FATFS_UnLinkDriver(USERPath);
 	uint8_t ret = FATFS_LinkDriver(&USER_Driver, USERPath);
 	if(ret)
-		return SDI_FATFS_LINK_ERR;
+		return SD_FF_LINK_ERR;
 
 	FRESULT fres = f_mount(msd->sd_fs, "", 1);
 	if(fres != FR_OK)
-		return SDI_BAD_MOUNT;
+		return SD_MOUNT_ERR;
 
 	fres = f_open(msd->head_file, name_head_file, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
 	if(fres != FR_OK)
@@ -187,17 +196,27 @@ void sd_deinit(mysd* msd) {
 	free(msd->head_file);
 	free(msd->data_file);
 	free(msd->sd_fs);
+
+	msd->sd_fs = NULL;
+	msd->head_file = NULL;
+	msd->data_file = NULL;
 }
 
 uint8_t refresh_data(mysd* msd) {
+	if(!msd)
+		return SD_MSD_NULL;
+
 	f_close(msd->data_file);
 	return f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
 }
 
 uint8_t save_data(mysd* msd) {
-	uint8_t ret = flush_heads(msd);
-	if(ret != SD_OK)
-		return ret;
+	if(!msd)
+		return SD_MSD_NULL;
+
+	uint8_t res = flush_heads(msd);
+	if(res != SD_OK)
+		return res;
 
 	FRESULT fres = f_sync(msd->data_file);
 	if(fres != FR_OK)
@@ -209,18 +228,20 @@ uint8_t save_data(mysd* msd) {
 int16_t get_next_packet(uint8_t* packet_buf, mysd* msd) {
 	if(!msd)
 		return GP_MSD_NULL;
+	if(!packet_buf)
+		return GP_PACKET_NULL;
 
-	set_active(msd->r_head, msd);
+	uint8_t res = set_active(msd->r_head, msd);
+	if(res != SD_OK)
+		return res;
 
 	UINT bytesRead = 0;
 	FRESULT fres = f_read(msd->data_file, packet_buf, MSD_PACKET_SIZE, &bytesRead);
 	if(fres != FR_OK)// || bytesRead < MSD_PACKET_SIZE) TODO: ?
 		return GP_READ_ERR;
 
-	if(bytesRead == 0)
-		return GP_NOT_FOUND;
-
-	increment_head(&msd->r_head, msd);
+	if(bytesRead > 0)
+		increment_head(&msd->r_head, msd);
 
 	return bytesRead;
 }
@@ -228,12 +249,16 @@ int16_t get_next_packet(uint8_t* packet_buf, mysd* msd) {
 uint8_t write_next_packet(uint8_t* packet_buf, size_t in_size, mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
+	if(!packet_buf)
+		return SD_PACKET_NULL;
 
-	set_active(msd->w_head, msd);
+	uint8_t res = set_active(msd->w_head, msd);
+	if(res != SD_OK)
+		return res;
 
 	uint8_t* write_buf = packet_buf;
 
-	if(in_size != MSD_PACKET_SIZE) {
+	if(in_size < MSD_PACKET_SIZE) {
 		write_buf = calloc(1, MSD_PACKET_SIZE);
 		memcpy(write_buf, packet_buf, in_size);
 	}
@@ -243,7 +268,7 @@ uint8_t write_next_packet(uint8_t* packet_buf, size_t in_size, mysd* msd) {
 	if(fres != FR_OK || bytes_written < MSD_PACKET_SIZE)
 		return SD_WRITE_ERR;
 
-	if(in_size != MSD_PACKET_SIZE)
+	if(in_size < MSD_PACKET_SIZE)
 		free(write_buf);
 
 	increment_head(&msd->w_head, msd);

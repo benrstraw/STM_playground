@@ -80,6 +80,7 @@
 /* Private define ------------------------------------------------------------*/
 #define FCLK_SLOW() { hspi1.Instance->I2SPR = 128; }	/* Set SCLK = slow */
 #define FCLK_FAST() { hspi1.Instance->I2SPR = 16; }	/* Set SCLK = fast */
+//TODO: invert with a BJT and flip this active low according to WTC
 
 #define CS_HIGH()	{HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);}
 #define CS_LOW()	{HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);}
