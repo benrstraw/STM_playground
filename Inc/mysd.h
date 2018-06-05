@@ -19,7 +19,8 @@
 #define SD_CLOSE_ERR	8
 #define SD_MOUNT_ERR	9
 #define SD_BAD_MALLOC	10
-#define SD_FF_LINK_ERR	11
+#define SD_OUT_OF_SPACE	11
+#define SD_FF_LINK_ERR	12
 
 #define GP_MSD_NULL		-1
 #define GP_PACKET_NULL	-2
@@ -29,15 +30,16 @@
 #include "fatfs.h"
 
 #define MSD_PACKET_SIZE 128
-#define MSD_PACKETS_PER_FILE 50 // very small number for testing
-//#define MSD_PACKETS_PER_FILE 33554431 // = floor of (4294967295 / 128) = [4GiB-1 max FAT32 file size / current PACKET_SIZE]
+#define MSD_PACKETS_PER_FILE 33554431 // = floor of (4294967295 / 128) = [4GiB-1 max FAT32 file size / current PACKET_SIZE]
+//#define MSD_PACKETS_PER_FILE 8 // very small number, used for head rollover testing, not suitable for flight
 
 typedef struct {
 	uint32_t r_head, w_head;
+	uint8_t w_wrap;
 
 	uint32_t max_files;
-	uint32_t active_file;
-	char active_file_name[4];
+	uint16_t active_file;
+	char active_file_name[6];
 
 	FATFS* sd_fs;
 	FIL* head_file;

@@ -263,6 +263,26 @@ int main(void)
 			printf("Done! [%lu]\r\n", HAL_GetTick());
 		} else if(cin == 'l') {
 			printf("Refreshing data... [%d]\r\n", refresh_data(sd));
+		} else if(cin == 'u') {
+			if(!sd)
+				continue;
+
+			printf("Filling 1000 sequential packets... [%lu]\r\n", HAL_GetTick());
+
+			uint8_t num_buf[MSD_PACKET_SIZE] = {0};
+			for(int i = 0; i < 1000; i++) {
+				snprintf((char*)num_buf, sizeof num_buf, "test packet #%lu", sd->w_head);
+				write_next_packet(num_buf, sizeof num_buf, sd);
+			}
+
+			printf("Done! [%lu]\r\n", HAL_GetTick());
+		} else if(cin == 'c') {
+			if(!sd)
+				continue;
+
+			uint8_t s_buffer[MSD_PACKET_SIZE] = {0};
+			snprintf((char*)s_buffer, sizeof s_buffer, "test packet #%lu", sd->w_head);
+			printf("\rWriting: \"%s\" ... [%d]\r\n", (char*)s_buffer, write_next_packet(s_buffer, sizeof s_buffer, sd));
 		}
 
 

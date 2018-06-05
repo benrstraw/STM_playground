@@ -17,7 +17,7 @@ uint8_t recall_heads(mysd* msd) {
 		return SD_MSD_NULL;
 
 	UINT bytes_read;
-	BYTE head_buff[sizeof msd->r_head + sizeof msd->w_head];
+	BYTE head_buff[sizeof msd->r_head + sizeof msd->w_head + sizeof msd->w_wrap];
 
 	FRESULT fres = f_lseek(msd->head_file, 0);
 	if(fres != FR_OK)
@@ -30,8 +30,11 @@ uint8_t recall_heads(mysd* msd) {
 	// Building ints from bytes, hooray! Stored big-endian.
 	msd->r_head = (uint32_t)head_buff[3] | (uint32_t)head_buff[2] << 8
 			| (uint32_t)head_buff[1] << 16 | (uint32_t)head_buff[0] << 24;
+
 	msd->w_head = (uint32_t)head_buff[7] | (uint32_t)head_buff[6] << 8
 			| (uint32_t)head_buff[5] << 16 | (uint32_t)head_buff[4] << 24;
+
+	msd->w_wrap = head_buff[8];
 
 	return SD_OK;
 }
@@ -40,7 +43,7 @@ uint8_t flush_heads(mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
-	BYTE head_buff[sizeof msd->r_head + sizeof msd->w_head];
+	BYTE head_buff[sizeof msd->r_head + sizeof msd->w_head + sizeof msd->w_wrap];
 
 	// Dumping the head integers into byte arrays through the magic of bit shifting.
 	// head_buff: 0-3 = read head, 4-7 = write head, both stored big-endian
@@ -53,6 +56,8 @@ uint8_t flush_heads(mysd* msd) {
 	head_buff[5] = (msd->w_head >> 16) & 0xFF;
 	head_buff[6] = (msd->w_head >> 8) & 0xFF;
 	head_buff[7] = msd->w_head & 0xFF;
+
+	head_buff[8] = msd->w_wrap;
 
 	FRESULT fres = f_lseek(msd->head_file, 0);
 	if(fres != FR_OK)
@@ -82,7 +87,7 @@ uint8_t change_file(uint8_t new_file, mysd* msd) {
 		return SD_CLOSE_ERR;
 
 	msd->active_file = new_file;
-	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
+	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%u", msd->active_file);
 
 	fres = f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
 	if(fres != FR_OK)
@@ -114,8 +119,13 @@ uint32_t increment_head(uint32_t* head, mysd* msd) {
 	if(!msd || !head)
 		return UINT32_MAX;
 
-	if(((++(*head)) % (MSD_PACKETS_PER_FILE * msd->max_files)) == 0)
+	if(((++(*head)) % (MSD_PACKETS_PER_FILE * msd->max_files)) == 0) {
 		(*head) = 0;
+		if(head == &msd->w_head)
+			msd->w_wrap = 1;
+		else if(msd->w_wrap)
+			msd->w_wrap = 0;
+	}
 
 	return *head;
 }
@@ -164,12 +174,13 @@ uint8_t sd_init(mysd* msd) {
 	}
 
 	msd->active_file = 0;
-	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
+	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%u", msd->active_file);
 
 	uint32_t tot_sect = (msd->sd_fs->n_fatent - 2) * msd->sd_fs->csize;
 	uint32_t total_packets = (tot_sect - 2000000) * (512 / 128); // tot_sect - 2mil sectors to accommodate ~gig of err and overhead
 
-	msd->max_files = total_packets / MSD_PACKETS_PER_FILE;
+	msd->max_files = total_packets / MSD_PACKETS_PER_FILE; // TODO: disbaled for testing
+	//msd->max_files = 8; // force a very small number for head rollover testing
 
 	fres = f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
 	if(fres != FR_OK)
@@ -231,6 +242,9 @@ int16_t get_next_packet(uint8_t* packet_buf, mysd* msd) {
 	if(!packet_buf)
 		return GP_PACKET_NULL;
 
+	if(msd->r_head >= msd->w_head && msd->w_wrap == 0)
+		return 0;
+
 	uint8_t res = set_active(msd->r_head, msd);
 	if(res != SD_OK)
 		return res;
@@ -251,6 +265,9 @@ uint8_t write_next_packet(uint8_t* packet_buf, size_t in_size, mysd* msd) {
 		return SD_MSD_NULL;
 	if(!packet_buf)
 		return SD_PACKET_NULL;
+
+	if(msd->w_head >= msd->r_head && msd->w_wrap == 1)
+		return SD_OUT_OF_SPACE;
 
 	uint8_t res = set_active(msd->w_head, msd);
 	if(res != SD_OK)
