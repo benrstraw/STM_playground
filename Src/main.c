@@ -57,14 +57,7 @@
 #include "gpio.h"
 
 /* USER CODE BEGIN Includes */
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <sys/unistd.h>
-
-#include "ff.h"
-#include "mysd.h"
+#include "UART_IRQ/UART_IRQ.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -83,33 +76,6 @@ void SystemClock_Config(void);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-
-int _write(int file, char *data, int len) {
-	if ((file != STDOUT_FILENO) && (file != STDERR_FILENO)) {
-		errno = EBADF;
-		return -1;
-	}
-
-	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, (uint8_t*) data, len, 0xFFFF);
-
-	// return # of bytes written - as best we can tell
-	return (status == HAL_OK ? len : 0);
-}
-
-void print_buf(uint8_t* buffer, size_t buf_size) {
-	const uint8_t line_length = 16;
-	for(int i = 0; i < (buf_size / line_length); i++) {
-		for(int j = 0; j < line_length; j++)
-			printf("%02X", buffer[(i * line_length) + j]);
-		printf("\r\n");
-	}
-
-	if(buf_size % 16) {
-		for(int k = 0; k < buf_size % line_length; k++)
-			printf("%02X", buffer[((buf_size / line_length) * line_length) + k]);
-		printf("\r\n");
-	}
-}
 
 /* USER CODE END 0 */
 
@@ -149,142 +115,25 @@ int main(void)
   MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
 
-/*	 We only want the timer to run after we push the button and light the LED,
-	 so immediately stop it. For some reason, initializing the timer sets the
-	 interrupt update bit, meaning as soon as we start up the timer after the
-	 first button press, it raises the interrupt, immediately turning the LED
-	 back off. This is fixed by clearing the interrupt bit after we stop it,
-	 before the first run of the timer. Setting the counter to 0 isn't necessary,
-	 as that's done in the button's interrupt handler.
-
-	HAL_TIM_Base_Stop_IT(&htim2);
-	__HAL_TIM_CLEAR_IT(&htim2, TIM_IT_UPDATE);
-
-	// Delay to allow SD card to get set up internally.
-	HAL_Delay(1000);
-*/
-
-  // Create a null pointer to a `mysd`, to be malloc'd upon request (see: cin == 'i')
-  // and populated by `sd_init`
-  mysd* sd = NULL;
-
+  char test[256] = {0};
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-	uint8_t cin;
 	while (1) {
-		HAL_UART_Receive(&huart1, &cin, 1, 0xFFFFFF);
+		/* Reads characters from USART1 until a null-terminator is encountered (press Ctrl + Space to send a null-byte),
+		 * then echos the typed text back. The `sizeof test` argument defines the maximum length of characters to read,
+		 * and getS will return upon reaching that many characters regardless of whether a null-byte has been encountered.
+		 */
+		getS(&huart1, test, sizeof test);
+		putS(&huart1, test);
 
-		if(cin == 'd') { // [d]einitialize SD
-			printf("Deinitializing mySD...\r\n");
-			sd_deinit(sd);
-			free(sd);
-			sd = NULL; // set to NULL for the pointer validity checks in every branch!
-		} else if(cin == 'i') { // [i]nitialize SD
-			if(!sd)
-				sd = calloc(1, sizeof(mysd)); // either calloc or memset zero so the struct's fields are null!
-
-			printf("Initializing mySD... [%d]\r\n", sd_init(sd)); // otherwise this call will fail!
-		} else if(cin == 'h') { // get [h]eads
-			if(sd) // this validity check in every branch that directly accesses `sd`
-				printf("R/W heads are at: R = <%lu>, W = <%lu>\r\n", (uint32_t)sd->r_head, (uint32_t)sd->w_head);
-		} else if(cin == 'z') { // [z]ero heads
-			if(sd)
-				printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)(sd->r_head = 0), (uint32_t)(sd->w_head = 0));
-		} else if(cin == 'g') { // [g]et next packet
-			printf("Getting next packet...\r\n");
-
-			uint8_t p_buf[MSD_PACKET_SIZE] = {0};
-			int32_t p_size = get_next_packet(p_buf, sd);
-
-			if(p_size <= 0) {
-				printf("ERR [%ld]\r\n", p_size);
-				continue;
-			}
-
-			HAL_UART_Transmit(&huart1, p_buf, p_size, 0xFFFFFF);
-			printf(" [%ld] \r\n", p_size);
-		} else if(cin == 'x') { // [g]et next packet
-			printf("Getting next packet (hex)...\r\n");
-
-			uint8_t p_buf[MSD_PACKET_SIZE] = {0};
-			int32_t p_size = get_next_packet(p_buf, sd);
-
-			if(p_size <= 0) {
-				printf("ERR [%ld]\r\n", p_size);
-				continue;
-			}
-
-			print_buf(p_buf, sizeof p_buf);
-		} else if(cin == 'w') { // w = input a string to be added to the packet file
-			uint8_t s_buffer[512];
-			uint16_t s_i = 0;
-			do { // we must assemble our own strings from individual characters, done in this loop
-				HAL_UART_Receive(&huart1, &cin, 1, 0xFFFFFF);
-				if(cin == '\r' || cin == '\n')
-					break; // while is just to provide an upper limit, this is the useful break
-				s_buffer[s_i++] = cin; // collect value then increment
-				HAL_UART_Transmit(&huart1, &cin, 1, 0xFFFFFF); // echo input back to user
-			} while (s_i < (sizeof s_buffer) - 1);
-			s_buffer[s_i] = '\0';
-
-			printf("\rWriting: \"%s\" ... [%d]\r\n", (char*)s_buffer, write_next_packet(s_buffer, strlen((char*)s_buffer), sd));
-		} else if(cin == '/') { // / = increment R head
-			if(sd)
-				printf("R = <%lu>\r\n", (uint32_t)(++(sd->r_head)));
-		} else if(cin == '.') { // . = reset R head to 0
-			if(sd)
-				printf("R = <%lu>\r\n", (uint32_t)(sd->r_head = 0));
-		} else if(cin == '\'') { // ' = increment W head
-			if(sd)
-				printf("W = <%lu>\r\n", (uint32_t)(++(sd->w_head)));
-		} else if(cin == ';') { // ; = reset W head to 0
-			if(sd)
-				printf("W = <%lu>\r\n", (uint32_t)(sd->w_head = 0));
-		} else if(cin == 's') { // ; = reset W head to 0
-			if(sd)
-				printf("Saving data... [%d]\r\n", save_data(sd));
-		} else if(cin == 'f') {
-			if(!sd)
-				continue;
-
-			printf("Filling 1000 random packets... [%lu]\r\n", HAL_GetTick());
-
-			uint8_t rand_buf[MSD_PACKET_SIZE];
-			srand(HAL_GetTick());
-			for(int i = 0; i < 1000; i++) {
-				for(int j = 0; j < MSD_PACKET_SIZE; j++)
-					rand_buf[j] = rand() % 0x0100;
-
-				write_next_packet(rand_buf, sizeof rand_buf, sd);
-			}
-
-			printf("Done! [%lu]\r\n", HAL_GetTick());
-		} else if(cin == 'l') {
-			printf("Refreshing data... [%d]\r\n", refresh_data(sd));
-		} else if(cin == 'u') {
-			if(!sd)
-				continue;
-
-			printf("Filling 1000 sequential packets... [%lu]\r\n", HAL_GetTick());
-
-			uint8_t num_buf[MSD_PACKET_SIZE] = {0};
-			for(int i = 0; i < 1000; i++) {
-				snprintf((char*)num_buf, sizeof num_buf, "test packet #%lu", sd->w_head);
-				write_next_packet(num_buf, sizeof num_buf, sd);
-			}
-
-			printf("Done! [%lu]\r\n", HAL_GetTick());
-		} else if(cin == 'c') {
-			if(!sd)
-				continue;
-
-			uint8_t s_buffer[MSD_PACKET_SIZE] = {0};
-			snprintf((char*)s_buffer, sizeof s_buffer, "test packet #%lu", sd->w_head);
-			printf("\rWriting: \"%s\" ... [%d]\r\n", (char*)s_buffer, write_next_packet(s_buffer, sizeof s_buffer, sd));
-		}
-
+		/*
+		 * Reads and then echos the next 4 characters. Treats null-bytes like any other character, does not terminate
+		 * the string. After 4 bytes have been entered, they will be echoed back and the demo will begin again.
+		 */
+		getB(&huart1, test, 4);
+		putB(&huart1, test, 4);
 
   /* USER CODE END WHILE */
 
