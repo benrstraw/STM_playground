@@ -110,11 +110,26 @@ void UART_printSOS(UART_HandleTypeDef *huart, uint32_t time) {
 	}
 }
 
-///////////////////////////////////////////////////////////////////////////////////
-// Providing the required external linkage for the functions inlined in the header.
+void UART_PUT(UART_HandleTypeDef *huart, char *str) {
+	HAL_UART_Transmit(huart, (uint8_t *) str, (uint16_t) sizeof(str), 0xFFFF);
+}
 
-extern inline void UART_PUT(UART_HandleTypeDef *huart, char *str);
-extern inline void getS(UART_HandleTypeDef *huart, char *buf, uint16_t max_len);
-extern inline void putS(UART_HandleTypeDef *huart, char* buf);
-extern inline void putB(UART_HandleTypeDef *huart, char* buf, uint16_t len);
-extern inline void getB(UART_HandleTypeDef *huart, char *buf, uint16_t len);
+void getS(UART_HandleTypeDef *huart, char *buf, uint16_t max_len) {
+	for(uint16_t i = 0; i < max_len; i++) {
+		HAL_UART_Receive(huart, (uint8_t*)(buf + i), 1, 0xFFFF);
+		if(buf[i] == '\0')
+			break;
+	}
+}
+
+void putS(UART_HandleTypeDef *huart, char* buf) {
+	HAL_UART_Transmit(huart, (uint8_t *)buf, strlen(buf), 0xFFFF);
+}
+
+void putB(UART_HandleTypeDef *huart, char* buf, uint16_t len) {
+	HAL_UART_Transmit(huart, (uint8_t *) buf, len, 0xFFFF);
+}
+
+void getB(UART_HandleTypeDef *huart, char *buf, uint16_t len) {
+	HAL_UART_Receive(huart, (uint8_t *)buf, len, 0xFFFF);
+}
