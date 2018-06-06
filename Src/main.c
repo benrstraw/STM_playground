@@ -57,14 +57,7 @@
 #include "gpio.h"
 
 /* USER CODE BEGIN Includes */
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <errno.h>
-#include <sys/unistd.h>
-
-#include "ff.h"
-#include "mysd.h"
+#include "UART_IRQ/UART_IRQ.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -83,33 +76,6 @@ void SystemClock_Config(void);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-
-int _write(int file, char *data, int len) {
-	if ((file != STDOUT_FILENO) && (file != STDERR_FILENO)) {
-		errno = EBADF;
-		return -1;
-	}
-
-	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, (uint8_t*) data, len, 0xFFFF);
-
-	// return # of bytes written - as best we can tell
-	return (status == HAL_OK ? len : 0);
-}
-
-void print_buf(uint8_t* buffer, size_t buf_size) {
-	const uint8_t line_length = 16;
-	for(int i = 0; i < (buf_size / line_length); i++) {
-		for(int j = 0; j < line_length; j++)
-			printf("%02X", buffer[(i * line_length) + j]);
-		printf("\r\n");
-	}
-
-	if(buf_size % 16) {
-		for(int k = 0; k < buf_size % line_length; k++)
-			printf("%02X", buffer[((buf_size / line_length) * line_length) + k]);
-		printf("\r\n");
-	}
-}
 
 /* USER CODE END 0 */
 
@@ -149,11 +115,25 @@ int main(void)
   MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
 
+  char test[256] = {0};
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
+		/* Reads characters from USART1 until a null-terminator is encountered (press Ctrl + Space to send a null-byte),
+		 * then echos the typed text back. The `sizeof test` argument defines the maximum length of characters to read,
+		 * and getS will return upon reaching that many characters regardless of whether a null-byte has been encountered.
+		 */
+		getS(&huart1, test, sizeof test);
+		putS(&huart1, test);
+
+		/*
+		 * Reads and then echos the next 4 characters. Treats null-bytes like any other character, does not terminate
+		 * the string. After 4 bytes have been entered, they will be echoed back and the demo will begin again.
+		 */
+		getB(&huart1, test, 4);
+		putB(&huart1, test, 4);
 
   /* USER CODE END WHILE */
 
