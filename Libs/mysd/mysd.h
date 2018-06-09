@@ -30,15 +30,18 @@
 #include "fatfs.h"
 
 #define MSD_PACKET_SIZE 128
-#define MSD_PACKETS_PER_FILE 33554431 // = floor of (4294967295 / 128) = [4GiB-1 max FAT32 file size / current PACKET_SIZE]
+//#define MSD_PACKETS_PER_FILE 33554431 // floor of (4294967295 / 128) = [4GiB-1 max FAT32 file size / current PACKET_SIZE]
 //#define MSD_PACKETS_PER_FILE 8 // very small number, used for head rollover testing, not suitable for flight
+#define MSD_PACKETS_PER_FILE 128 // 128 bytes * 128 packets = 16,384 byte files
+
+// expected max_files =
 
 typedef struct {
 	uint32_t r_head, w_head;
 	uint8_t w_wrap;
 
 	uint32_t max_files;
-	uint16_t active_file;
+	uint32_t active_file;
 	char active_file_name[6];
 
 	FATFS* sd_fs;

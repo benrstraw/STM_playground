@@ -87,7 +87,7 @@ uint8_t change_file(uint8_t new_file, mysd* msd) {
 		return SD_CLOSE_ERR;
 
 	msd->active_file = new_file;
-	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%u", msd->active_file);
+	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
 
 	fres = f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
 	if(fres != FR_OK)
@@ -174,10 +174,10 @@ uint8_t sd_init(mysd* msd) {
 	}
 
 	msd->active_file = 0;
-	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%u", msd->active_file);
+	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
 
-	uint32_t tot_sect = (msd->sd_fs->n_fatent - 2) * msd->sd_fs->csize;
-	uint32_t total_packets = (tot_sect - 2000000) * (512 / 128); // tot_sect - 2mil sectors to accommodate ~gig of err and overhead
+	uint32_t total_sect = (msd->sd_fs->n_fatent - 2) * msd->sd_fs->csize;
+	uint32_t total_packets = (total_sect - 2000000) * (_MAX_SS / 128); // -2mil sectors for ~gig of safety. sector size / 128 B.
 
 	msd->max_files = total_packets / MSD_PACKETS_PER_FILE; // TODO: disbaled for testing
 	//msd->max_files = 8; // force a very small number for head rollover testing
