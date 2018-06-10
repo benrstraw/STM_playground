@@ -76,7 +76,7 @@ uint8_t flush_heads(mysd* msd) {
 	return SD_OK;
 }
 
-uint8_t change_file(uint8_t new_file, mysd* msd) {
+uint8_t change_file(uint32_t new_file, mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
@@ -84,8 +84,8 @@ uint8_t change_file(uint8_t new_file, mysd* msd) {
 		return SD_OK;
 
 	FRESULT fres = f_close(msd->data_file);
-//	if(fres != FR_OK)
-//		return SD_CLOSE_ERR;
+	if(fres != FR_OK)
+		return SD_CLOSE_ERR;
 
 	msd->active_file = new_file;
 	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
@@ -102,7 +102,7 @@ uint8_t set_active(uint32_t head, mysd* msd) {
 		return SD_MSD_NULL;
 
 	uint32_t packet_offset = (head % MSD_PACKETS_PER_FILE) * MSD_PACKET_SIZE;
-	uint8_t packet_file = head / MSD_PACKETS_PER_FILE;
+	uint16_t packet_file = head / MSD_PACKETS_PER_FILE;
 
 	uint8_t res = change_file(packet_file, msd);
 	if(res != SD_OK)
@@ -242,7 +242,7 @@ uint8_t save_data(mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
-	uint8_t res = flush_heads(msd);
+	/*uint8_t res = */flush_heads(msd);
 //	if(res != SD_OK)
 //		return res;
 

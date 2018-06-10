@@ -32,8 +32,8 @@
 
 #define MSD_PACKET_SIZE 128
 //#define MSD_PACKETS_PER_FILE 33554431 // floor of (4294967295 / 128) = [4GiB-1 max FAT32 file size / current PACKET_SIZE]
-//#define MSD_PACKETS_PER_FILE 8 // very small number, used for head rollover testing, not suitable for flight
-#define MSD_PACKETS_PER_FILE 4 // 128 bytes * 64 packets = 8,192 byte files
+//#define MSD_PACKETS_PER_FILE 8192 // 128 bytes * 8192 packets = 1,048,576 byte files
+#define MSD_PACKETS_PER_FILE 4
 
 // 268,173,300 - Maximum number of files supported by FAT32.
 // expected max_files = 128 GB (2^30 * 128) / (128 bytes * PACKETS_PER_FILE) = 16,777,216

@@ -66,6 +66,7 @@
 
 #include "ff.h"
 #include "mysd/mysd.h"
+#include "fnv/fnv.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -169,6 +170,10 @@ int main(void)
   // Create a null pointer to a `mysd`, to be malloc'd upon request (see: cin == 'i')
   // and populated by `sd_init`
   mysd* sd = NULL;
+  uint8_t fnvtest1[] = { 'a', 'b', 'c', 'd' };
+  uint8_t fnvtest2[] = { 'a', 'b', 'c', 'd', '\n' };
+
+  printf("fnv1 'abcd' with null %lx#, without %lx#\r\n", fnv1a_32(fnvtest2, 5), fnv1a_32(fnvtest1, 4));
 
   /* USER CODE END 2 */
 
@@ -259,7 +264,7 @@ int main(void)
 			uint8_t rand_buf[MSD_PACKET_SIZE];
 			srand(HAL_GetTick());
 			for(int i = 0; i < 1000; i++) {
-				for(int j = 0; j < MSD_PACKET_SIZE; j++)
+				for(uint8_t j = 0; j < MSD_PACKET_SIZE; j++)
 					rand_buf[j] = rand() % 0x0100;
 
 				write_next_packet(rand_buf, sizeof rand_buf, sd);
@@ -294,53 +299,65 @@ int main(void)
 			if(!sd)
 				continue;
 
-			const uint16_t howmany = 1200;
+			const static uint32_t howmany = 2000;
 
 			uint8_t pak_buf[MSD_PACKET_SIZE] = {0};
 			uint8_t res = 0;
 
 			sd->r_head = sd->w_head;
 
-			printf("Beginning 2k packet R/W test...\r\n");
+			printf("Beginning %lu packet R/W test...\r\n", howmany);
 			uint32_t start_time = HAL_GetTick();
 
-			for(uint16_t i = 0; i < howmany; i++) {
-				memset(pak_buf, 0, MSD_PACKET_SIZE);
-				for(uint8_t j = 0; j < MSD_PACKET_SIZE - 1; j += 2) {
-					pak_buf[j] = (i >> 8) & 0xFF;
-					pak_buf[j+1] = i & 0xFF;
+			for(uint32_t i = 0; i < howmany; i++) {
+//				memset(pak_buf, 0, MSD_PACKET_SIZE);
+				for(uint8_t j = 0; j < MSD_PACKET_SIZE - (sizeof howmany - 1); j += sizeof howmany) {
+					pak_buf[j] = (i >> 24) & 0xFF;
+					pak_buf[j+1] = (i >> 16) & 0xFF;
+					pak_buf[j+2] = (i >> 8) & 0xFF;
+					pak_buf[j+3] = i & 0xFF;
 				}
+
 				res = write_next_packet(pak_buf, sizeof pak_buf, sd);
 				if(res) {
-					printf("Write fail on packet %d!\r\n", i);
+					printf("Write fail on packet %lu!\r\n", i);
 					break;
 				}
+
+				if(i % 1000 == 0 && i > 0)
+					printf("%lu @ %lu ms.\r\n", i, HAL_GetTick() - start_time);
 			}
 
-			printf("Writes done! 2k packets took %lu ms. Beginning reads...\r\n", HAL_GetTick() - start_time);
+			printf("Writes done! %lu packets took %lu ms. Beginning reads...\r\n", howmany, HAL_GetTick() - start_time);
 			start_time = HAL_GetTick();
 
-			for(uint16_t i = 0; i < howmany; i++) {
-				uint16_t test = 0;
+			for(uint32_t i = 0; i < howmany; i++) {
+				uint32_t test = 0;
 
-				memset(pak_buf, 0, MSD_PACKET_SIZE);
+//				memset(pak_buf, 0, MSD_PACKET_SIZE);
 				int32_t p_size = get_next_packet(pak_buf, sd);
 				if(p_size <= 0) {
-					printf("Read fail on packet %d!\r\n", i);
+					printf("Read fail on packet %lu!\r\n", i);
 					break;
 				}
 
-				for(uint8_t j = 0; j < MSD_PACKET_SIZE - 1; j += 2) {
-					test = (uint16_t)pak_buf[j] << 8 | (uint16_t)pak_buf[j+1];
+				for(uint8_t j = 0; j < MSD_PACKET_SIZE - (sizeof howmany - 1); j += sizeof howmany) {
+					test = (uint16_t)pak_buf[j] << 24 | (uint16_t)pak_buf[j+1] << 16
+							| (uint16_t)pak_buf[j+2] << 8 | (uint16_t)pak_buf[j+3];
 					if(test != i) {
-						printf("Read fail on packet %d!\r\n", i);
-						i = 2000;
+						printf("Read fail on packet %lu!\r\n", i);
+						i = howmany;
 						break;
 					}
 				}
+
+				if(i % 1000 == 0 && i > 0)
+					printf("%lu @ %lu ms.\r\n", i, HAL_GetTick() - start_time);
 			}
 
-			printf("Reads done! 2k packets took %lu ms.\r\n", HAL_GetTick() - start_time);
+			printf("Reads done! %lu packets took %lu ms.\r\n", howmany, HAL_GetTick() - start_time);
+		} else if(cin == 'k') {
+			printf("Making filesystem... [%d]\r\n", f_mkfs("", 0, 0));
 		}
 
 
