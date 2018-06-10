@@ -196,6 +196,8 @@ int main(void)
 			printf("Getting next packet...\r\n");
 
 			uint8_t p_buf[MSD_PACKET_SIZE] = {0};
+
+			uint32_t start_time = HAL_GetTick();
 			int32_t p_size = get_next_packet(p_buf, sd);
 
 			if(p_size <= 0) {
@@ -203,8 +205,9 @@ int main(void)
 				continue;
 			}
 
+			uint32_t stop_time = HAL_GetTick();
 			HAL_UART_Transmit(&huart1, p_buf, p_size, 0xFFFFFF);
-			printf(" [%ld] \r\n", p_size);
+			printf(" [%ld] Took %lu ms.\r\n", p_size, stop_time - start_time);
 		} else if(cin == 'x') { // [g]et next packet
 			printf("Getting next packet (hex)...\r\n");
 
@@ -282,7 +285,60 @@ int main(void)
 
 			uint8_t s_buffer[MSD_PACKET_SIZE] = {0};
 			snprintf((char*)s_buffer, sizeof s_buffer, "test packet #%lu", sd->w_head);
-			printf("\rWriting: \"%s\" ... [%d]\r\n", (char*)s_buffer, write_next_packet(s_buffer, sizeof s_buffer, sd));
+			uint32_t start_time = HAL_GetTick();
+			uint8_t res = write_next_packet(s_buffer, sizeof s_buffer, sd);
+			printf("\rWriting: \"%s\" ... [%d]. Took %lu ms.\r\n", (char*)s_buffer, res, HAL_GetTick() - start_time);
+		} else if(cin == '+') {
+			if(!sd)
+				continue;
+
+			const uint16_t howmany = 1200;
+
+			uint8_t pak_buf[MSD_PACKET_SIZE] = {0};
+			uint8_t res = 0;
+
+			sd->r_head = sd->w_head;
+
+			printf("Beginning 2k packet R/W test...\r\n");
+			uint32_t start_time = HAL_GetTick();
+
+			for(uint16_t i = 0; i < howmany; i++) {
+				memset(pak_buf, 0, MSD_PACKET_SIZE);
+				for(uint8_t j = 0; j < MSD_PACKET_SIZE - 1; j += 2) {
+					pak_buf[j] = (i >> 8) & 0xFF;
+					pak_buf[j+1] = i & 0xFF;
+				}
+				res = write_next_packet(pak_buf, sizeof pak_buf, sd);
+				if(res) {
+					printf("Write fail on packet %d!\r\n", i);
+					break;
+				}
+			}
+
+			printf("Writes done! 2k packets took %lu ms. Beginning reads...\r\n", HAL_GetTick() - start_time);
+			start_time = HAL_GetTick();
+
+			for(uint16_t i = 0; i < howmany; i++) {
+				uint16_t test = 0;
+
+				memset(pak_buf, 0, MSD_PACKET_SIZE);
+				int32_t p_size = get_next_packet(pak_buf, sd);
+				if(p_size <= 0) {
+					printf("Read fail on packet %d!\r\n", i);
+					break;
+				}
+
+				for(uint8_t j = 0; j < MSD_PACKET_SIZE - 1; j += 2) {
+					test = (uint16_t)pak_buf[j] << 8 | (uint16_t)pak_buf[j+1];
+					if(test != i) {
+						printf("Read fail on packet %d!\r\n", i);
+						i = 2000;
+						break;
+					}
+				}
+			}
+
+			printf("Reads done! 2k packets took %lu ms.\r\n", HAL_GetTick() - start_time);
 		}
 
 

@@ -25,6 +25,7 @@
 #define GP_MSD_NULL		-1
 #define GP_PACKET_NULL	-2
 #define GP_READ_ERR		-3
+#define GP_ACTIVE_ERR	-4
 
 #include <stdint.h>
 #include "fatfs.h"
@@ -32,9 +33,10 @@
 #define MSD_PACKET_SIZE 128
 //#define MSD_PACKETS_PER_FILE 33554431 // floor of (4294967295 / 128) = [4GiB-1 max FAT32 file size / current PACKET_SIZE]
 //#define MSD_PACKETS_PER_FILE 8 // very small number, used for head rollover testing, not suitable for flight
-#define MSD_PACKETS_PER_FILE 128 // 128 bytes * 128 packets = 16,384 byte files
+#define MSD_PACKETS_PER_FILE 4 // 128 bytes * 64 packets = 8,192 byte files
 
-// expected max_files =
+// 268,173,300 - Maximum number of files supported by FAT32.
+// expected max_files = 128 GB (2^30 * 128) / (128 bytes * PACKETS_PER_FILE) = 16,777,216
 
 typedef struct {
 	uint32_t r_head, w_head;
@@ -42,7 +44,7 @@ typedef struct {
 
 	uint32_t max_files;
 	uint32_t active_file;
-	char active_file_name[6];
+	char active_file_name[12];
 
 	FATFS* sd_fs;
 	FIL* head_file;

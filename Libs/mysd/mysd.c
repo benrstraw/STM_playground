@@ -59,7 +59,8 @@ uint8_t flush_heads(mysd* msd) {
 
 	head_buff[8] = msd->w_wrap;
 
-	FRESULT fres = f_lseek(msd->head_file, 0);
+	FRESULT fres;
+	fres = f_lseek(msd->head_file, 0);
 	if(fres != FR_OK)
 		return SD_SEEK_ERR;
 
@@ -83,8 +84,8 @@ uint8_t change_file(uint8_t new_file, mysd* msd) {
 		return SD_OK;
 
 	FRESULT fres = f_close(msd->data_file);
-	if(fres != FR_OK)
-		return SD_CLOSE_ERR;
+//	if(fres != FR_OK)
+//		return SD_CLOSE_ERR;
 
 	msd->active_file = new_file;
 	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
@@ -213,6 +214,22 @@ void sd_deinit(mysd* msd) {
 	msd->data_file = NULL;
 }
 
+void sd_reset(mysd* msd) {
+	if(!msd)
+		return;
+
+	uint32_t temp_r_head = msd->r_head;
+	uint32_t temp_w_head = msd->w_head;
+	uint8_t temp_w_wrap = msd->w_wrap;
+
+	sd_deinit(msd);
+	sd_init(msd);
+
+	msd->r_head = temp_r_head;
+	msd->w_head = temp_w_head;
+	msd->w_wrap = temp_w_wrap;
+}
+
 uint8_t refresh_data(mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
@@ -226,8 +243,8 @@ uint8_t save_data(mysd* msd) {
 		return SD_MSD_NULL;
 
 	uint8_t res = flush_heads(msd);
-	if(res != SD_OK)
-		return res;
+//	if(res != SD_OK)
+//		return res;
 
 	FRESULT fres = f_sync(msd->data_file);
 	if(fres != FR_OK)
@@ -247,7 +264,7 @@ int16_t get_next_packet(uint8_t* packet_buf, mysd* msd) {
 
 	uint8_t res = set_active(msd->r_head, msd);
 	if(res != SD_OK)
-		return res;
+		return GP_ACTIVE_ERR;
 
 	UINT bytesRead = 0;
 	FRESULT fres = f_read(msd->data_file, packet_buf, MSD_PACKET_SIZE, &bytesRead);

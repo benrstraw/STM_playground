@@ -79,7 +79,8 @@
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 #define FCLK_SLOW() { hspi1.Instance->I2SPR = 128; }	/* Set SCLK = slow */
-#define FCLK_FAST() { hspi1.Instance->I2SPR = 16; }	/* Set SCLK = fast */
+//#define FCLK_FAST() { hspi1.Instance->I2SPR = 16; }	/* Set SCLK = fast */
+#define FCLK_FAST() { hspi1.Instance->I2SPR = 32; }	/* Set SCLK = fast */
 
 #define CS_HIGH()	{HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);}
 #define CS_LOW()	{HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_SET);}
@@ -211,8 +212,7 @@ static volatile DSTATUS Stat = STA_NOINIT;
   void despiselect (void)
   {
   	CS_HIGH();		/* Set CS# high */
-  	xchg_spi(0xFF);	/* Dummy clock (force DO hi-z for multiple slave SPI) */
-
+  	//xchg_spi(0xFF);	/* Dummy clock (force DO hi-z for multiple slave SPI) */
   }
 
 
