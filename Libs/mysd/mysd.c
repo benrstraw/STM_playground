@@ -99,6 +99,8 @@ uint8_t sd_init(mysd* msd) {
 		return SD_MSD_NULL;
 
 	memset(msd, 0, sizeof(mysd));
+	memset(msd->head_sector, 0, SD_SECTOR_SIZE);
+	memset(msd->c_sector, 0, SD_SECTOR_SIZE);
 
 	msd->r_head = msd->w_head = 0;
 

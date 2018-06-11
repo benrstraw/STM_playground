@@ -168,7 +168,7 @@ static int spiselect(void) {
 static int rcvr_datablock(uint8_t* buff, uint32_t btr) {
 	uint8_t token;
 
-	SPI_Timer_On(200);
+	SPI_Timer_On(1000);
 	do { /* Wait for DataStart token in timeout of 200ms */
 		token = xchg_spi(0xFF);
 		/* This loop will take a time. Insert rot_rdq() here for multitask envilonment. */
@@ -192,7 +192,7 @@ static int rcvr_datablock(uint8_t* buff, uint32_t btr) {
 static int xmit_datablock(const uint8_t* buff, uint8_t token) {
 	uint8_t resp;
 
-	if (!wait_ready(500))
+	if (!wait_ready(1000))
 		return 0; /* Wait for card ready */
 
 	xchg_spi(token); /* Send token */
@@ -247,7 +247,7 @@ static uint8_t send_cmd(uint8_t cmd, uint32_t arg) {
 	/* Receive command resp */
 	if (cmd == CMD12)
 		xchg_spi(0xFF); /* Diacard following one byte when CMD12 */
-	n = 10; /* Wait for response (10 bytes max) */
+	n = 40; /* Wait for response (10 bytes max) */
 	do {
 		res = xchg_spi(0xFF);
 	} while ((res & 0x80) && --n);

@@ -9,12 +9,12 @@
 #define MYSD_MYSD_H_
 
 #define SD_OK			0
-#define SD_MSD_NULL		1
-#define SD_PACKET_NULL	2
-#define SD_READ_ERR		3
-#define SD_WRITE_ERR	4
-#define SD_OUT_OF_SPACE	5
-#define SD_NO_PACKET	6
+#define SD_MSD_NULL		5
+#define SD_PACKET_NULL	6
+#define SD_READ_ERR		7
+#define SD_WRITE_ERR	8
+#define SD_OUT_OF_SPACE	9
+#define SD_NO_PACKET	10
 
 #include <stddef.h>
 #include <stdint.h>
