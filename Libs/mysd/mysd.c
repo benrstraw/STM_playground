@@ -66,6 +66,9 @@ uint8_t set_active(uint32_t head, mysd* msd) {
 	if(msd->n_sector == packet_sector)
 		return SD_OK;
 
+	if(packet_sector % SD_FLUSH_ON == 0)
+		flush_heads(msd);
+
 	DRESULT dres;
 	if(msd->n_sector != 0) {
 		 dres = sdio_write(msd->c_sector, msd->n_sector, 1);

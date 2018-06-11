@@ -20,9 +20,10 @@
 #include <stdint.h>
 #include "sd_diskio.h"
 
-#define SD_SECTOR_SIZE 512
-#define SD_PACKET_SIZE 128
+#define SD_SECTOR_SIZE	512
+#define SD_PACKET_SIZE	128
 #define SD_PPS (SD_SECTOR_SIZE / SD_PACKET_SIZE)
+#define SD_FLUSH_ON		32		// flush heads @ (sector % SD_FLUSH_ON)
 
 typedef struct {
 	uint32_t r_head, w_head;			// keeps track of the current packet numbers
