@@ -66,9 +66,12 @@ uint8_t set_active(uint32_t head, mysd* msd) {
 	if(msd->n_sector == packet_sector)
 		return SD_OK;
 
-	DRESULT dres = sdio_write(msd->c_sector, msd->n_sector, 1);
-	if(dres)
-		return dres;
+	DRESULT dres;
+	if(msd->n_sector != 0) {
+		 dres = sdio_write(msd->c_sector, msd->n_sector, 1);
+		if(dres)
+			return dres;
+	}
 
 	dres = sdio_read(msd->c_sector, packet_sector, 1);
 	if(dres)
@@ -102,8 +105,6 @@ uint8_t sd_init(mysd* msd) {
 	memset(msd->head_sector, 0, SD_SECTOR_SIZE);
 	memset(msd->c_sector, 0, SD_SECTOR_SIZE);
 
-	msd->r_head = msd->w_head = 0;
-
 	DRESULT dres = sdio_initialize();
 	if(dres)
 		return dres;
@@ -115,11 +116,6 @@ uint8_t sd_init(mysd* msd) {
 	uint32_t total_sect;
 	sdio_ioctl(GET_SECTOR_COUNT, &total_sect);
 	msd->max_packets = (total_sect - 2000000) * SD_PPS; // -2mil sectors for ~gig of safety.
-
-	msd->n_sector = 1;
-	dres = sdio_read(msd->c_sector, msd->n_sector, 1);
-	if(dres)
-		return dres;
 
 	return SD_OK;
 }
