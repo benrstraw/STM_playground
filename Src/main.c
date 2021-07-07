@@ -4,53 +4,41 @@
   * @file           : main.c
   * @brief          : Main program body
   ******************************************************************************
-  * This notice applies to any and all portions of this file
+  ** This notice applies to any and all portions of this file
   * that are not between comment pairs USER CODE BEGIN and
   * USER CODE END. Other portions of this file, whether 
   * inserted by the user or by software development tools
   * are owned by their respective copyright owners.
   *
-  * Copyright (c) 2018 STMicroelectronics International N.V. 
-  * All rights reserved.
+  * COPYRIGHT(c) 2018 STMicroelectronics
   *
-  * Redistribution and use in source and binary forms, with or without 
-  * modification, are permitted, provided that the following conditions are met:
+  * Redistribution and use in source and binary forms, with or without modification,
+  * are permitted provided that the following conditions are met:
+  *   1. Redistributions of source code must retain the above copyright notice,
+  *      this list of conditions and the following disclaimer.
+  *   2. Redistributions in binary form must reproduce the above copyright notice,
+  *      this list of conditions and the following disclaimer in the documentation
+  *      and/or other materials provided with the distribution.
+  *   3. Neither the name of STMicroelectronics nor the names of its contributors
+  *      may be used to endorse or promote products derived from this software
+  *      without specific prior written permission.
   *
-  * 1. Redistribution of source code must retain the above copyright notice, 
-  *    this list of conditions and the following disclaimer.
-  * 2. Redistributions in binary form must reproduce the above copyright notice,
-  *    this list of conditions and the following disclaimer in the documentation
-  *    and/or other materials provided with the distribution.
-  * 3. Neither the name of STMicroelectronics nor the names of other 
-  *    contributors to this software may be used to endorse or promote products 
-  *    derived from this software without specific written permission.
-  * 4. This software, including modifications and/or derivative works of this 
-  *    software, must execute solely and exclusively on microcontroller or
-  *    microprocessor devices manufactured by or for STMicroelectronics.
-  * 5. Redistribution and use of this software other than as permitted under 
-  *    this license is void and will automatically terminate your rights under 
-  *    this license. 
-  *
-  * THIS SOFTWARE IS PROVIDED BY STMICROELECTRONICS AND CONTRIBUTORS "AS IS" 
-  * AND ANY EXPRESS, IMPLIED OR STATUTORY WARRANTIES, INCLUDING, BUT NOT 
-  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
-  * PARTICULAR PURPOSE AND NON-INFRINGEMENT OF THIRD PARTY INTELLECTUAL PROPERTY
-  * RIGHTS ARE DISCLAIMED TO THE FULLEST EXTENT PERMITTED BY LAW. IN NO EVENT 
-  * SHALL STMICROELECTRONICS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-  * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, 
-  * OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-  * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-  * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
-  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+  * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+  * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+  * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   *
   ******************************************************************************
   */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32l1xx_hal.h"
-#include "crc.h"
-#include "fatfs.h"
 #include "rtc.h"
 #include "spi.h"
 #include "tim.h"
@@ -64,7 +52,6 @@
 #include <errno.h>
 #include <sys/unistd.h>
 
-#include "ff.h"
 #include "mysd/mysd.h"
 #include "fnv/fnv.h"
 /* USER CODE END Includes */
@@ -148,8 +135,6 @@ int main(void)
   MX_TIM2_Init();
   MX_RTC_Init();
   MX_SPI1_Init();
-  MX_FATFS_Init();
-  MX_CRC_Init();
   /* USER CODE BEGIN 2 */
 
 /*	 We only want the timer to run after we push the button and light the LED,
@@ -169,10 +154,12 @@ int main(void)
 
   // Create a null pointer to a `mysd`, to be malloc'd upon request (see: cin == 'i')
   // and populated by `sd_init`
-  mysd* sd = NULL;
+  mysd _sd = {0};
+  mysd* sd = &_sd; // because I'm lazy and don't want a hundred address-of's
   uint8_t fnvtest1[] = { 'a', 'b', 'c', 'd' };
   uint8_t fnvtest2[] = { 'a', 'b', 'c', 'd', '\n' };
 
+  printf("sizeof short=%d, int=%d, long=%d, long long=%d\r\n",sizeof(short), sizeof(int), sizeof(long), sizeof(long long));
   printf("fnv1 'abcd' with null %lx#, without %lx#\r\n", fnv1a_32(fnvtest2, 5), fnv1a_32(fnvtest1, 4));
 
   /* USER CODE END 2 */
@@ -183,50 +170,37 @@ int main(void)
 	while (1) {
 		HAL_UART_Receive(&huart1, &cin, 1, 0xFFFFFF);
 
-		if(cin == 'd') { // [d]einitialize SD
-			printf("Deinitializing mySD...\r\n");
-			sd_deinit(sd);
-			free(sd);
-			sd = NULL; // set to NULL for the pointer validity checks in every branch!
-		} else if(cin == 'i') { // [i]nitialize SD
-			if(!sd)
-				sd = calloc(1, sizeof(mysd)); // either calloc or memset zero so the struct's fields are null!
-
+		if(cin == 'i') { // [i]nitialize SD
 			printf("Initializing mySD... [%d]\r\n", sd_init(sd)); // otherwise this call will fail!
-		} else if(cin == 'h') { // get [h]eads
-			if(sd) // this validity check in every branch that directly accesses `sd`
-				printf("R/W heads are at: R = <%lu>, W = <%lu>\r\n", (uint32_t)sd->r_head, (uint32_t)sd->w_head);
-		} else if(cin == 'z') { // [z]ero heads
-			if(sd)
-				printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)(sd->r_head = 0), (uint32_t)(sd->w_head = 0));
+		} else if(cin == 's') { // [s]ave data
+			printf("Saving data... [%d]\r\n", save_data(sd));
+		} else if(cin == 'r') { // [r]eset sd instance
+			printf("Forcing reset...\r\n");
+			sd_reset(sd);
 		} else if(cin == 'g') { // [g]et next packet
 			printf("Getting next packet...\r\n");
 
-			uint8_t p_buf[MSD_PACKET_SIZE] = {0};
+			uint8_t p_buf[SD_PACKET_SIZE] = {0};
 
 			uint32_t start_time = HAL_GetTick();
 			int32_t p_size = get_next_packet(p_buf, sd);
-
-			if(p_size <= 0) {
-				printf("ERR [%ld]\r\n", p_size);
-				continue;
-			}
-
 			uint32_t stop_time = HAL_GetTick();
-			HAL_UART_Transmit(&huart1, p_buf, p_size, 0xFFFFFF);
-			printf(" [%ld] Took %lu ms.\r\n", p_size, stop_time - start_time);
+
+			printf("%s [%lu - took %lu ms]\r\n", p_buf, p_size, stop_time - start_time);
 		} else if(cin == 'x') { // [g]et next packet
 			printf("Getting next packet (hex)...\r\n");
 
-			uint8_t p_buf[MSD_PACKET_SIZE] = {0};
-			int32_t p_size = get_next_packet(p_buf, sd);
+			uint8_t p_buf[SD_PACKET_SIZE] = {0};
 
-			if(p_size <= 0) {
+			uint32_t start_time = HAL_GetTick();
+			int32_t p_size = get_next_packet(p_buf, sd);
+			uint32_t stop_time = HAL_GetTick();
+
+			if(p_size)
 				printf("ERR [%ld]\r\n", p_size);
-				continue;
-			}
 
 			print_buf(p_buf, sizeof p_buf);
+			printf("\r\n[%lu - took %lu ms]\r\n", p_size, stop_time - start_time);
 		} else if(cin == 'w') { // w = input a string to be added to the packet file
 			uint8_t s_buffer[512];
 			uint16_t s_i = 0;
@@ -240,46 +214,23 @@ int main(void)
 			s_buffer[s_i] = '\0';
 
 			printf("\rWriting: \"%s\" ... [%d]\r\n", (char*)s_buffer, write_next_packet(s_buffer, strlen((char*)s_buffer), sd));
-		} else if(cin == '/') { // / = increment R head
-			if(sd)
-				printf("R = <%lu>\r\n", (uint32_t)(++(sd->r_head)));
-		} else if(cin == '.') { // . = reset R head to 0
-			if(sd)
-				printf("R = <%lu>\r\n", (uint32_t)(sd->r_head = 0));
-		} else if(cin == '\'') { // ' = increment W head
-			if(sd)
-				printf("W = <%lu>\r\n", (uint32_t)(++(sd->w_head)));
-		} else if(cin == ';') { // ; = reset W head to 0
-			if(sd)
-				printf("W = <%lu>\r\n", (uint32_t)(sd->w_head = 0));
-		} else if(cin == 's') { // ; = reset W head to 0
-			if(sd)
-				printf("Saving data... [%d]\r\n", save_data(sd));
 		} else if(cin == 'f') {
-			if(!sd)
-				continue;
-
 			printf("Filling 1000 random packets... [%lu]\r\n", HAL_GetTick());
 
-			uint8_t rand_buf[MSD_PACKET_SIZE];
+			uint8_t rand_buf[SD_PACKET_SIZE];
 			srand(HAL_GetTick());
 			for(int i = 0; i < 1000; i++) {
-				for(uint8_t j = 0; j < MSD_PACKET_SIZE; j++)
+				for(uint8_t j = 0; j < SD_PACKET_SIZE; j++)
 					rand_buf[j] = rand() % 0x0100;
 
 				write_next_packet(rand_buf, sizeof rand_buf, sd);
 			}
 
 			printf("Done! [%lu]\r\n", HAL_GetTick());
-		} else if(cin == 'l') {
-			printf("Refreshing data... [%d]\r\n", refresh_data(sd));
 		} else if(cin == 'u') {
-			if(!sd)
-				continue;
-
 			printf("Filling 1000 sequential packets... [%lu]\r\n", HAL_GetTick());
 
-			uint8_t num_buf[MSD_PACKET_SIZE] = {0};
+			uint8_t num_buf[SD_PACKET_SIZE] = {0};
 			for(int i = 0; i < 1000; i++) {
 				snprintf((char*)num_buf, sizeof num_buf, "test packet #%lu", sd->w_head);
 				write_next_packet(num_buf, sizeof num_buf, sd);
@@ -287,21 +238,15 @@ int main(void)
 
 			printf("Done! [%lu]\r\n", HAL_GetTick());
 		} else if(cin == 'c') {
-			if(!sd)
-				continue;
-
-			uint8_t s_buffer[MSD_PACKET_SIZE] = {0};
+			uint8_t s_buffer[SD_PACKET_SIZE] = {0};
 			snprintf((char*)s_buffer, sizeof s_buffer, "test packet #%lu", sd->w_head);
 			uint32_t start_time = HAL_GetTick();
 			uint8_t res = write_next_packet(s_buffer, sizeof s_buffer, sd);
 			printf("\rWriting: \"%s\" ... [%d]. Took %lu ms.\r\n", (char*)s_buffer, res, HAL_GetTick() - start_time);
 		} else if(cin == '+') {
-			if(!sd)
-				continue;
+			const static uint32_t howmany = 20000;
 
-			const static uint32_t howmany = 2000;
-
-			uint8_t pak_buf[MSD_PACKET_SIZE] = {0};
+			uint8_t pak_buf[SD_PACKET_SIZE] = {0};
 			uint8_t res = 0;
 
 			sd->r_head = sd->w_head;
@@ -311,7 +256,7 @@ int main(void)
 
 			for(uint32_t i = 0; i < howmany; i++) {
 //				memset(pak_buf, 0, MSD_PACKET_SIZE);
-				for(uint8_t j = 0; j < MSD_PACKET_SIZE - (sizeof howmany - 1); j += sizeof howmany) {
+				for(uint8_t j = 0; j < SD_PACKET_SIZE - (sizeof howmany - 1); j += sizeof howmany) {
 					pak_buf[j] = (i >> 24) & 0xFF;
 					pak_buf[j+1] = (i >> 16) & 0xFF;
 					pak_buf[j+2] = (i >> 8) & 0xFF;
@@ -336,12 +281,12 @@ int main(void)
 
 //				memset(pak_buf, 0, MSD_PACKET_SIZE);
 				int32_t p_size = get_next_packet(pak_buf, sd);
-				if(p_size <= 0) {
+				if(p_size) {
 					printf("Read fail on packet %lu!\r\n", i);
 					break;
 				}
 
-				for(uint8_t j = 0; j < MSD_PACKET_SIZE - (sizeof howmany - 1); j += sizeof howmany) {
+				for(uint8_t j = 0; j < SD_PACKET_SIZE - (sizeof howmany - 1); j += sizeof howmany) {
 					test = (uint16_t)pak_buf[j] << 24 | (uint16_t)pak_buf[j+1] << 16
 							| (uint16_t)pak_buf[j+2] << 8 | (uint16_t)pak_buf[j+3];
 					if(test != i) {
@@ -356,8 +301,18 @@ int main(void)
 			}
 
 			printf("Reads done! %lu packets took %lu ms.\r\n", howmany, HAL_GetTick() - start_time);
-		} else if(cin == 'k') {
-			printf("Making filesystem... [%d]\r\n", f_mkfs("", 0, 0));
+		} else if(cin == 'h') { // get [h]eads
+				printf("R/W heads are at: R = <%lu>, W = <%lu>\r\n", (uint32_t)sd->r_head, (uint32_t)sd->w_head);
+		} else if(cin == 'z') { // [z]ero heads
+				printf("Heads zeroed! R = <%lu> W = <%lu>\r\n", (uint32_t)(sd->r_head = 0), (uint32_t)(sd->w_head = 0));
+		} else if(cin == '/') { // / = increment R head
+			printf("R = <%lu>\r\n", (uint32_t)(++(sd->r_head)));
+		} else if(cin == '.') { // . = reset R head to 0
+			printf("R = <%lu>\r\n", (uint32_t)(sd->r_head = 0));
+		} else if(cin == '\'') { // ' = increment W head
+			printf("W = <%lu>\r\n", (uint32_t)(++(sd->w_head)));
+		} else if(cin == ';') { // ; = reset W head to 0
+			printf("W = <%lu>\r\n", (uint32_t)(sd->w_head = 0));
 		}
 
 

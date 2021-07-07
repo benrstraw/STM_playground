@@ -3,38 +3,29 @@
  *
  *  Created on: May 15, 2018
  *      Author: Ben
- */
+*/
 
 #include "mysd.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-const char name_head_file[] = "head.bin";
-
 uint8_t recall_heads(mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
-	UINT bytes_read;
-	BYTE head_buff[sizeof msd->r_head + sizeof msd->w_head + sizeof msd->w_wrap];
-
-	FRESULT fres = f_lseek(msd->head_file, 0);
-	if(fres != FR_OK)
-		return SD_SEEK_ERR;
-
-	fres = f_read(msd->head_file, head_buff, sizeof head_buff, &bytes_read);
-	if(fres != FR_OK || bytes_read < sizeof head_buff)
-		return SD_READ_ERR;
+	DRESULT dres = sdio_read(msd->head_sector, 0, 1);
+	if(dres)
+		return dres;
 
 	// Building ints from bytes, hooray! Stored big-endian.
-	msd->r_head = (uint32_t)head_buff[3] | (uint32_t)head_buff[2] << 8
-			| (uint32_t)head_buff[1] << 16 | (uint32_t)head_buff[0] << 24;
+	msd->r_head = (uint32_t)msd->head_sector[5] | (uint32_t)msd->head_sector[4] << 8
+			| (uint32_t)msd->head_sector[3] << 16 | (uint32_t)msd->head_sector[2] << 24;
 
-	msd->w_head = (uint32_t)head_buff[7] | (uint32_t)head_buff[6] << 8
-			| (uint32_t)head_buff[5] << 16 | (uint32_t)head_buff[4] << 24;
+	msd->w_head = (uint32_t)msd->head_sector[9] | (uint32_t)msd->head_sector[8] << 8
+			| (uint32_t)msd->head_sector[7] << 16 | (uint32_t)msd->head_sector[6] << 24;
 
-	msd->w_wrap = head_buff[8];
+	msd->w_wrap = msd->head_sector[10];
 
 	return SD_OK;
 }
@@ -43,56 +34,26 @@ uint8_t flush_heads(mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
-	BYTE head_buff[sizeof msd->r_head + sizeof msd->w_head + sizeof msd->w_wrap];
-
 	// Dumping the head integers into byte arrays through the magic of bit shifting.
-	// head_buff: 0-3 = read head, 4-7 = write head, both stored big-endian
-	head_buff[0] = (msd->r_head >> 24) & 0xFF;
-	head_buff[1] = (msd->r_head >> 16) & 0xFF;
-	head_buff[2] = (msd->r_head >> 8) & 0xFF;
-	head_buff[3] = msd->r_head & 0xFF;
+	// head_sector: 2-5 = read head, 6-9 = write head, both stored big-endian
+	msd->head_sector[0] = 'S';
+	msd->head_sector[1] = 's';
 
-	head_buff[4] = (msd->w_head >> 24) & 0xFF;
-	head_buff[5] = (msd->w_head >> 16) & 0xFF;
-	head_buff[6] = (msd->w_head >> 8) & 0xFF;
-	head_buff[7] = msd->w_head & 0xFF;
+	msd->head_sector[2] = (msd->r_head >> 24) & 0xFF;
+	msd->head_sector[3] = (msd->r_head >> 16) & 0xFF;
+	msd->head_sector[4] = (msd->r_head >> 8) & 0xFF;
+	msd->head_sector[5] = msd->r_head & 0xFF;
 
-	head_buff[8] = msd->w_wrap;
+	msd->head_sector[6] = (msd->w_head >> 24) & 0xFF;
+	msd->head_sector[7] = (msd->w_head >> 16) & 0xFF;
+	msd->head_sector[8] = (msd->w_head >> 8) & 0xFF;
+	msd->head_sector[9] = msd->w_head & 0xFF;
 
-	FRESULT fres;
-	fres = f_lseek(msd->head_file, 0);
-	if(fres != FR_OK)
-		return SD_SEEK_ERR;
+	msd->head_sector[10] = msd->w_wrap;
 
-	UINT bytes_written;
-	fres = f_write(msd->head_file, head_buff, sizeof head_buff, &bytes_written);
-	if(fres != FR_OK || bytes_written < sizeof head_buff)
-		return SD_WRITE_ERR;
-
-	fres = f_sync(msd->head_file);
-	if(fres != FR_OK)
-		return SD_SYNC_ERR;
-
-	return SD_OK;
-}
-
-uint8_t change_file(uint32_t new_file, mysd* msd) {
-	if(!msd)
-		return SD_MSD_NULL;
-
-	if(new_file == msd->active_file)
-		return SD_OK;
-
-	FRESULT fres = f_close(msd->data_file);
-	if(fres != FR_OK)
-		return SD_CLOSE_ERR;
-
-	msd->active_file = new_file;
-	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
-
-	fres = f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
-	if(fres != FR_OK)
-		return SD_OPEN_ERR;
+	DRESULT dres = sdio_write(msd->head_sector, 0, 1);
+	if(dres)
+		return dres;
 
 	return SD_OK;
 }
@@ -101,17 +62,25 @@ uint8_t set_active(uint32_t head, mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
-	uint32_t packet_offset = (head % MSD_PACKETS_PER_FILE) * MSD_PACKET_SIZE;
-	uint16_t packet_file = head / MSD_PACKETS_PER_FILE;
+	uint32_t packet_sector = (head / SD_PPS) + 1;
+	if(msd->n_sector == packet_sector)
+		return SD_OK;
 
-	uint8_t res = change_file(packet_file, msd);
-	if(res != SD_OK)
-		return res;
+	if(packet_sector % SD_FLUSH_ON == 0)
+		flush_heads(msd);
 
-	// Move file pointer to specified head.
-	FRESULT fres = f_lseek(msd->data_file, packet_offset);
-	if(fres != FR_OK)
-		return SD_SEEK_ERR;
+	DRESULT dres;
+	if(msd->n_sector != 0) {
+		 dres = sdio_write(msd->c_sector, msd->n_sector, 1);
+		if(dres)
+			return dres;
+	}
+
+	dres = sdio_read(msd->c_sector, packet_sector, 1);
+	if(dres)
+		return dres;
+
+	msd->n_sector = packet_sector;
 
 	return SD_OK;
 }
@@ -120,7 +89,7 @@ uint32_t increment_head(uint32_t* head, mysd* msd) {
 	if(!msd || !head)
 		return UINT32_MAX;
 
-	if(((++(*head)) % (MSD_PACKETS_PER_FILE * msd->max_files)) == 0) {
+	if(((++(*head)) % msd->max_packets) == 0) {
 		(*head) = 0;
 		if(head == &msd->w_head)
 			msd->w_wrap = 1;
@@ -135,146 +104,79 @@ uint8_t sd_init(mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
-	msd->r_head = msd->w_head = 0;
+	memset(msd, 0, sizeof(mysd));
+	memset(msd->head_sector, 0, SD_SECTOR_SIZE);
+	memset(msd->c_sector, 0, SD_SECTOR_SIZE);
 
-	if(!msd->sd_fs || !msd->head_file || !msd->data_file) {
-		msd->sd_fs = calloc(1, sizeof(FATFS));
-		msd->head_file = calloc(1, sizeof(FIL));
-		msd->data_file = calloc(1, sizeof(FIL));
+	DRESULT dres = sdio_initialize();
+	if(dres)
+		return dres;
 
-		if(!msd->sd_fs || !msd->head_file || !msd->data_file) {
-			free(msd->head_file);
-			free(msd->data_file);
-			free(msd->sd_fs);
+	uint8_t res = recall_heads(msd);
+	if(res)
+		return res;
 
-			msd->sd_fs = NULL;
-			msd->head_file = NULL;
-			msd->data_file = NULL;
-
-			return SD_BAD_MALLOC;
-		}
-	}
-
-	FATFS_UnLinkDriver(USERPath);
-	uint8_t ret = FATFS_LinkDriver(&USER_Driver, USERPath);
-	if(ret)
-		return SD_FF_LINK_ERR;
-
-	FRESULT fres = f_mount(msd->sd_fs, "", 1);
-	if(fres != FR_OK)
-		return SD_MOUNT_ERR;
-
-	fres = f_open(msd->head_file, name_head_file, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
-	if(fres != FR_OK)
-		return SD_OPEN_ERR;
-
-	if(f_size(msd->head_file) < (sizeof msd->r_head + sizeof msd->w_head)) {
-		flush_heads(msd);
-	} else {
-		recall_heads(msd);
-	}
-
-	msd->active_file = 0;
-	snprintf(msd->active_file_name, sizeof msd->active_file_name, "%lu", msd->active_file);
-
-	uint32_t total_sect = (msd->sd_fs->n_fatent - 2) * msd->sd_fs->csize;
-	uint32_t total_packets = (total_sect - 2000000) * (_MAX_SS / 128); // -2mil sectors for ~gig of safety. sector size / 128 B.
-
-	msd->max_files = total_packets / MSD_PACKETS_PER_FILE; // TODO: disbaled for testing
-	//msd->max_files = 8; // force a very small number for head rollover testing
-
-	fres = f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
-	if(fres != FR_OK)
-		return SD_OPEN_ERR;
+	uint32_t total_sect;
+	sdio_ioctl(GET_SECTOR_COUNT, &total_sect);
+	msd->max_packets = (total_sect - 2000000) * SD_PPS; // -2mil sectors for ~gig of safety.
 
 	return SD_OK;
 }
 
-void sd_deinit(mysd* msd) {
+uint8_t sd_reset(mysd* msd) {
 	if(!msd)
-		return;
-
-	if(msd->sd_fs && msd->head_file) {
-		flush_heads(msd);
-		f_close(msd->head_file);
-	}
-
-	if(msd->sd_fs && msd->data_file)
-		f_close(msd->data_file);
-
-	if(msd->sd_fs)
-		f_mount(NULL, "", 1);
-
-	free(msd->head_file);
-	free(msd->data_file);
-	free(msd->sd_fs);
-
-	msd->sd_fs = NULL;
-	msd->head_file = NULL;
-	msd->data_file = NULL;
-}
-
-void sd_reset(mysd* msd) {
-	if(!msd)
-		return;
+		return SD_MSD_NULL;
 
 	uint32_t temp_r_head = msd->r_head;
 	uint32_t temp_w_head = msd->w_head;
 	uint8_t temp_w_wrap = msd->w_wrap;
 
-	sd_deinit(msd);
-	sd_init(msd);
+	uint8_t res = sd_init(msd);
+	if(res)
+		return res;
 
 	msd->r_head = temp_r_head;
 	msd->w_head = temp_w_head;
 	msd->w_wrap = temp_w_wrap;
-}
 
-uint8_t refresh_data(mysd* msd) {
-	if(!msd)
-		return SD_MSD_NULL;
-
-	f_close(msd->data_file);
-	return f_open(msd->data_file, msd->active_file_name, FA_READ | FA_WRITE | FA_OPEN_ALWAYS);
+	return SD_OK;
 }
 
 uint8_t save_data(mysd* msd) {
 	if(!msd)
 		return SD_MSD_NULL;
 
-	/*uint8_t res = */flush_heads(msd);
-//	if(res != SD_OK)
-//		return res;
+	uint8_t res = flush_heads(msd);
+	if(res)
+		return res;
 
-	FRESULT fres = f_sync(msd->data_file);
-	if(fres != FR_OK)
-		return SD_SYNC_ERR;
+	DRESULT dres = sdio_write(msd->c_sector, msd->n_sector, 1);
+	if(dres)
+		return dres;
 
 	return SD_OK;
 }
 
-int16_t get_next_packet(uint8_t* packet_buf, mysd* msd) {
+uint8_t get_next_packet(uint8_t* packet_buf, mysd* msd) {
 	if(!msd)
-		return GP_MSD_NULL;
+		return SD_MSD_NULL;
 	if(!packet_buf)
-		return GP_PACKET_NULL;
+		return SD_PACKET_NULL;
 
+	// If R at W and W not wrapped, then no more to read.
 	if(msd->r_head >= msd->w_head && msd->w_wrap == 0)
-		return 0;
+		return SD_NO_PACKET;
 
 	uint8_t res = set_active(msd->r_head, msd);
-	if(res != SD_OK)
-		return GP_ACTIVE_ERR;
+	if(res)
+		return res;
 
-	UINT bytesRead = 0;
-	FRESULT fres = f_read(msd->data_file, packet_buf, MSD_PACKET_SIZE, &bytesRead);
-	if(fres != FR_OK)// || bytesRead < MSD_PACKET_SIZE) TODO: ?
-		return GP_READ_ERR;
+	uint16_t packet_offset = (msd->r_head % SD_PPS) * SD_PACKET_SIZE;
+	memcpy(packet_buf, (msd->c_sector + packet_offset), SD_PACKET_SIZE);
 
-	if(bytesRead > 0)
-		increment_head(&msd->r_head, msd);
+	increment_head(&msd->r_head, msd);
 
-	return bytesRead;
+	return SD_OK;
 }
 
 uint8_t write_next_packet(uint8_t* packet_buf, size_t in_size, mysd* msd) {
@@ -283,6 +185,7 @@ uint8_t write_next_packet(uint8_t* packet_buf, size_t in_size, mysd* msd) {
 	if(!packet_buf)
 		return SD_PACKET_NULL;
 
+	// If W is at H and W has already wrapped, we can't write any more.
 	if(msd->w_head >= msd->r_head && msd->w_wrap == 1)
 		return SD_OUT_OF_SPACE;
 
@@ -292,17 +195,15 @@ uint8_t write_next_packet(uint8_t* packet_buf, size_t in_size, mysd* msd) {
 
 	uint8_t* write_buf = packet_buf;
 
-	if(in_size < MSD_PACKET_SIZE) {
-		write_buf = calloc(1, MSD_PACKET_SIZE);
+	if(in_size < SD_PACKET_SIZE) {
+		write_buf = calloc(1, SD_PACKET_SIZE);
 		memcpy(write_buf, packet_buf, in_size);
 	}
 
-	UINT bytes_written;
-	FRESULT fres = f_write(msd->data_file, write_buf, MSD_PACKET_SIZE, &bytes_written);
-	if(fres != FR_OK || bytes_written < MSD_PACKET_SIZE)
-		return SD_WRITE_ERR;
+	uint16_t packet_offset = (msd->w_head % SD_PPS) * SD_PACKET_SIZE;
+	memcpy((msd->c_sector + packet_offset), write_buf, SD_PACKET_SIZE);
 
-	if(in_size < MSD_PACKET_SIZE)
+	if(in_size < SD_PACKET_SIZE)
 		free(write_buf);
 
 	increment_head(&msd->w_head, msd);
